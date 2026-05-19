@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Notifications from 'expo-notifications';
 import { useFonts } from 'expo-font';
 import {
   DMSans_400Regular,
@@ -61,18 +63,18 @@ function RootNavigator() {
       ) : (
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
-          <Stack.Screen name="CheckIn" component={CheckInScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="LogVisit" component={LogVisitScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="AddPlace" component={AddPlaceScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="Ask" component={AskScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="ChatHistory" component={ChatHistoryScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="Activity" component={ActivityScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="EditVisit" component={EditVisitScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="EditPlace" component={EditPlaceScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="Pairwise" component={PairwiseScreen} options={{ presentation: 'modal' }} />
-          <Stack.Screen name="Resort" component={ResortScreen} options={{ presentation: 'modal' }} />
+          <Stack.Screen name="CheckIn" component={CheckInScreen} />
+          <Stack.Screen name="LogVisit" component={LogVisitScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="AddPlace" component={AddPlaceScreen} />
+          <Stack.Screen name="Ask" component={AskScreen} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="ChatHistory" component={ChatHistoryScreen} />
+          <Stack.Screen name="Activity" component={ActivityScreen} />
+          <Stack.Screen name="EditVisit" component={EditVisitScreen} />
+          <Stack.Screen name="EditPlace" component={EditPlaceScreen} />
+          <Stack.Screen name="Pairwise" component={PairwiseScreen} />
+          <Stack.Screen name="Resort" component={ResortScreen} />
         </>
       )}
     </Stack.Navigator>
@@ -80,6 +82,23 @@ function RootNavigator() {
 }
 
 export default function App() {
+  const navigationRef = useRef(null);
+
+  useEffect(() => {
+    function handleNotifResponse(response) {
+      const data = response?.notification?.request?.content?.data || {};
+      if (data.type === 'visit_reminder' && navigationRef.current?.isReady()) {
+        navigationRef.current.navigate('LogVisit', {
+          placeId: data.place_id || null,
+          placeName: data.place_name || '',
+          checkinId: data.checkin_id || null,
+        });
+      }
+    }
+    const sub = Notifications.addNotificationResponseReceivedListener(handleNotifResponse);
+    return () => sub.remove();
+  }, []);
+
   const [fontsLoaded] = useFonts({
     DMSans_400Regular,
     DMSans_500Medium,
@@ -98,10 +117,28 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        <RootNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => {
+            // Cold start: check if app was opened by tapping a notification
+            Notifications.getLastNotificationResponseAsync().then(response => {
+              if (!response) return;
+              const data = response.notification.request.content.data || {};
+              if (data.type === 'visit_reminder') {
+                navigationRef.current?.navigate('LogVisit', {
+                  placeId: data.place_id || null,
+                  placeName: data.place_name || '',
+                  checkinId: data.checkin_id || null,
+                });
+              }
+            });
+          }}
+        >
+          <RootNavigator />
+        </NavigationContainer>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

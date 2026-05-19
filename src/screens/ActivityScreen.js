@@ -1,20 +1,85 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
-  RefreshControl, ActivityIndicator, SafeAreaView,
+  RefreshControl, ActivityIndicator, SafeAreaView, Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 import TierBadge from '../components/TierBadge';
 import { COLORS } from '../constants/colors';
 
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const same = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+  if (same(d, today)) return 'Today';
+  if (same(d, yesterday)) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 const TYPE_LABELS = {
   visit: 'Visited',
   new_place: 'Added',
   tier_change: 'Re-tiered',
   delete: 'Removed',
+  pending_checkin: 'Checked in',
 };
+
+function deleteEndpoint(item) {
+  if (item.type === 'visit')           return `/api/visits/${item.visit_id}/mobile`;
+  if (item.type === 'new_place')       return `/api/places/user-place/${item.user_place_id}/mobile`;
+  if (item.type === 'pending_checkin') return `/api/places/pending-checkin/${item.checkin_id}/mobile`;
+  return null;
+}
+
+function SwipeableCard({ item, onDelete, children, cardStyle }) {
+  const swipeRef = useRef(null);
+
+  function renderRightActions() {
+    return (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => {
+          swipeRef.current?.close();
+          Alert.alert(
+            'Delete?',
+            `Remove "${item.name}" from your activity? This cannot be undone.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete', style: 'destructive', onPress: onDelete },
+            ]
+          );
+        }}
+        activeOpacity={0.85}
+      >
+        <View style={styles.deleteCircle}>
+          <Ionicons name="close" size={20} color="#fff" />
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={renderRightActions}
+      rightThreshold={40}
+      overshootRight={false}
+    >
+      <View style={[styles.card, cardStyle]}>
+        {children}
+      </View>
+    </Swipeable>
+  );
+}
 
 export default function ActivityScreen({ navigation }) {
   const [items, setItems] = useState([]);
@@ -54,10 +119,22 @@ export default function ActivityScreen({ navigation }) {
     if (page < totalPages) load(page + 1);
   }
 
+  async function handleDelete(item) {
+    const endpoint = deleteEndpoint(item);
+    if (!endpoint) return;
+    try {
+      await api.json(endpoint, { method: 'DELETE' });
+      setItems(prev => prev.filter(i => i !== item));
+    } catch (e) {
+      Alert.alert('Error', 'Could not delete. Please try again.');
+    }
+  }
+
   function handleEdit(item) {
     if (item.type === 'visit' && item.visit_id) {
       navigation.navigate('EditVisit', {
         visitId: item.visit_id,
+        placeId: item.place_id,
         placeName: item.name,
         tier: item.tier || '',
         occasion: item.occasion || '',
@@ -120,28 +197,53 @@ export default function ActivityScreen({ navigation }) {
             <Text style={styles.emptyText}>No activity yet.</Text>
           </View>
         )}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.action}>
-                <Text style={styles.actionType}>{TYPE_LABELS[item.type] || item.type}</Text>
-                {' · '}
-                <Text style={styles.placeName}>{item.name}</Text>
-              </Text>
-              <Text style={styles.meta}>
-                {[item.category, item.occasion, item.date].filter(Boolean).join(' · ')}
-              </Text>
-            </View>
-            <View style={styles.cardRight}>
-              {item.tier && <TierBadge tier={item.tier} size="sm" />}
-              {(item.type === 'visit' || item.type === 'new_place') && (
-                <TouchableOpacity onPress={() => handleEdit(item)} style={styles.editBtn}>
-                  <Text style={styles.editBtnText}>Edit</Text>
+        renderItem={({ item }) => {
+          if (item.type === 'pending_checkin') {
+            return (
+              <SwipeableCard item={item} onDelete={() => handleDelete(item)} cardStyle={styles.pendingCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.action}>
+                    <Text style={styles.pendingLabel}>Unfinished checkin · </Text>
+                    <Text style={styles.placeName}>{item.name}</Text>
+                  </Text>
+                  <Text style={styles.meta}>{formatDate(item.date)}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.continueBtn}
+                  onPress={() => navigation.navigate('LogVisit', {
+                    placeId: item.place_id,
+                    placeName: item.name,
+                    checkinId: item.checkin_id,
+                  })}
+                >
+                  <Text style={styles.continueBtnText}>Continue</Text>
                 </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
+              </SwipeableCard>
+            );
+          }
+          return (
+            <SwipeableCard item={item} onDelete={() => handleDelete(item)}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.action}>
+                  <Text style={styles.actionType}>{TYPE_LABELS[item.type] || item.type}</Text>
+                  {' · '}
+                  <Text style={styles.placeName}>{item.name}</Text>
+                </Text>
+                <Text style={styles.meta}>
+                  {[item.category, item.occasion, formatDate(item.date)].filter(Boolean).join(' · ')}
+                </Text>
+              </View>
+              <View style={styles.cardRight}>
+                {item.tier && <TierBadge tier={item.tier} size="sm" />}
+                {(item.type === 'visit' || item.type === 'new_place') && (
+                  <TouchableOpacity onPress={() => handleEdit(item)} style={styles.editBtn}>
+                    <Text style={styles.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </SwipeableCard>
+          );
+        }}
         contentContainerStyle={{ paddingBottom: 40 }}
       />
     </SafeAreaView>
@@ -175,4 +277,22 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.gold,
   },
   editBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.gold },
+  pendingCard: {
+    borderColor: '#E8B84B', backgroundColor: '#FFFBF0',
+  },
+  pendingLabel: { fontWeight: '500', color: '#B8860B' },
+  continueBtn: {
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
+    backgroundColor: COLORS.gold,
+  },
+  continueBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  deleteAction: {
+    justifyContent: 'center', alignItems: 'center',
+    width: 72, marginBottom: 8, marginRight: 16,
+  },
+  deleteCircle: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.danger,
+    justifyContent: 'center', alignItems: 'center',
+  },
 });

@@ -55,6 +55,24 @@ export const api = {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   },
+
+  async upload(path, formData, retried = false) {
+    const token = await getToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', headers, body: formData });
+    if (res.status === 401 && !retried) {
+      try {
+        await refreshAccessToken();
+        return api.upload(path, formData, true);
+      } catch {
+        await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
+        throw new Error('SESSION_EXPIRED');
+      }
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
 };
 
 export { BASE_URL };

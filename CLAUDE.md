@@ -87,6 +87,9 @@ All require `Authorization: Bearer <token>` header.
 - `POST /api/ask` — AI chat
 - `GET /api/notifications?limit=30` — user notifications
 - `POST /api/notifications/mark-read` — mark all as read
+- `GET /api/photos?visit_id=X` — list photos for a visit (JWT)
+- `POST /api/photos/upload` — upload photo; send as multipart with `file` field + `place_id` + `visit_id`
+- `DELETE /api/photos/delete/<id>` — delete a photo
 
 ## Design tokens — src/constants/colors.js
 | Tier    | bg       | text    | label    |
@@ -105,7 +108,7 @@ Gold: #C8960C
 - `keyboardShouldPersistTaps="handled"` on any ScrollView/FlatList that contains buttons near a TextInput
 - All API errors returning HTML (`<`) mean a missing DB table on PythonAnywhere — run `python _dev_scripts/create_missing_tables.py` on PA
 
-## Recent changes (as of 2026-05-18)
+## Recent changes (as of 2026-05-19)
 - App moved from `C:\Users\colin\TasteBuddyAppScaffold` → `C:\Users\colin\OneDrive\Documents\Python\TasteBuddyApp`
 - `iosClientId` added to Google OAuth in WelcomeScreen + LoginScreen (was throwing "iOS Client ID must be defined")
 - `CheckInScreen` — added Google Places search bar; nearby places still load by default
@@ -114,3 +117,10 @@ Gold: #C8960C
 - `EditVisitScreen` — new screen: edit tier, occasion, notes via PATCH /api/visits/<id>/mobile
 - `EditPlaceScreen` — new screen: edit tier, category, cuisine via PATCH /api/places/user-place/<id>/mobile
 - `HomeScreen` — activity icon in header navigates to ActivityScreen
+- `LogVisitScreen` — photo picker section (max 5), deferred upload after visit save
+- `EditVisitScreen` — photo section: loads existing photos from GET /api/photos, immediate upload/delete
+- `ActivityScreen` — now passes `placeId` to EditVisit for photo uploads
+- `api/client.js` — added `api.upload()` for multipart form data
+- `SettingsScreen.js` — fixed `getExpoPushTokenAsync()` to pass `{ projectId }` from `Constants.expoConfig.extra.eas.projectId` (SDK 55 requirement); gracefully falls back to `{}` if projectId not set
+- `app.json` — added `extra.eas.projectId` field (currently empty — fill in from expo.dev or `eas project:init` to enable push tokens in production builds)
+- `App.js` — imports `expo-notifications`; `navigationRef` wired to NavigationContainer; `addNotificationResponseReceivedListener` navigates to LogVisit on `visit_reminder` tap (warm start); `getLastNotificationResponseAsync` in `onReady` handles cold start

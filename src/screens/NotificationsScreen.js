@@ -44,7 +44,7 @@ export default function NotificationsScreen({ navigation }) {
     }
   }, []);
 
-  useFocusEffect(load);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function markAllRead() {
     try {

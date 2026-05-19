@@ -135,11 +135,11 @@ export default function CheckInScreen({ navigation }) {
             We'll send you a reminder tomorrow at 10am to finish logging your visit to{' '}
             <Text style={{ fontFamily: 'DMSans_700Bold' }}>{checkedIn?.name}</Text>.
           </Text>
-          <TouchableOpacity style={styles.logNowBtn} onPress={logNow}>
-            <Text style={styles.logNowText}>I'll finish logging now</Text>
+          <TouchableOpacity style={styles.logNowBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.logNowText}>Remind me to finish logging later</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.doneBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.doneText}>Done — remind me tomorrow</Text>
+          <TouchableOpacity style={styles.doneBtn} onPress={logNow}>
+            <Text style={styles.doneText}>I'll actually continue logging right now</Text>
           </TouchableOpacity>
         </View>
       </View>

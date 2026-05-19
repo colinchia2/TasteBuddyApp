@@ -4,6 +4,7 @@ import {
   ScrollView, Switch, ActivityIndicator,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import ScreenHeader from '../components/ScreenHeader';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
@@ -25,7 +26,8 @@ export default function SettingsScreen({ navigation }) {
           setPushEnabled(false);
           return;
         }
-        const token = await Notifications.getExpoPushTokenAsync();
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+        const token = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : {});
         await api.json('/api/auth/push-token', {
           method: 'PATCH',
           body: JSON.stringify({ expo_push_token: token.data }),

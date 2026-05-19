@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ScreenHeader from '../components/ScreenHeader';
@@ -93,9 +94,16 @@ function ChoiceScreen({ navigation, onLogManually }) {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+function nearestHour() {
+  const now = new Date();
+  const mins = now.getHours() * 60 + (now.getMinutes() >= 30 ? 60 : 0);
+  return mins % (24 * 60);
+}
+
 export default function LogVisitScreen({ navigation, route }) {
   const paramPlaceId = route.params?.placeId;
   const paramPlaceName = route.params?.placeName;
+  const paramCheckinId = route.params?.checkinId || null;
 
   // Phase: 'choice' | 'search' | 'form'
   const [phase, setPhase] = useState(paramPlaceId ? 'form' : 'choice');
@@ -120,12 +128,13 @@ export default function LogVisitScreen({ navigation, route }) {
   const [customDate, setCustomDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedTOD, setSelectedTOD] = useState(null);
-  const [timeMinutes, setTimeMinutes] = useState(19 * 60); // default 7pm
+  const [timeMinutes, setTimeMinutes] = useState(nearestHour);
   const [occasions, setOccasions] = useState([]);
   const [partySize, setPartySize] = useState(null);
   const [notes, setNotes] = useState('');
   const [totalSpent, setTotalSpent] = useState('');
 
+  const [photos, setPhotos] = useState([]); // array of { uri }
   const [saving, setSaving] = useState(false);
 
   // ── Load categories when place known ────────────────────────────────────────
@@ -223,6 +232,34 @@ export default function LogVisitScreen({ navigation, route }) {
     setCatTiers(prev => ({ ...prev, [upId]: tier }));
   }
 
+  // ── Photos ────────────────────────────────────────────────────────────────────
+  async function pickPhoto() {
+    if (photos.length >= 5) { Alert.alert('Max 5 photos'); return; }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission needed', 'Allow photo access in Settings.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: false,
+      quality: 0.9,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setPhotos(prev => [...prev, { uri: result.assets[0].uri }]);
+    }
+  }
+
+  async function uploadPhotos(visitId, pid) {
+    for (const photo of photos) {
+      try {
+        const formData = new FormData();
+        const filename = photo.uri.split('/').pop();
+        formData.append('file', { uri: photo.uri, name: filename, type: 'image/jpeg' });
+        formData.append('place_id', String(pid));
+        formData.append('visit_id', String(visitId));
+        await api.upload('/api/photos/upload', formData);
+      } catch {}
+    }
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────────
   async function submit() {
     const activeCats = categories.filter(c => checkedCats[c.user_place_id]);
@@ -247,11 +284,15 @@ export default function LogVisitScreen({ navigation, route }) {
         user_place_id: c.user_place_id,
         tier: catTiers[c.user_place_id] || c.tier,
       })),
+      ...(paramCheckinId ? { pending_checkin_id: paramCheckinId } : {}),
     };
 
     setSaving(true);
     try {
       const data = await api.json('/api/visits/mobile', { method: 'POST', body: JSON.stringify(payload) });
+      if (photos.length > 0 && data.visit_id) {
+        await uploadPhotos(data.visit_id, placeId);
+      }
       if (data.pairwise_data) {
         navigation.replace('Pairwise', {
           newId: data.pairwise_data.new_id,
@@ -487,6 +528,27 @@ export default function LogVisitScreen({ navigation, route }) {
             />
           </View>
 
+          {/* ── 9. Photos ── */}
+          <Text style={styles.sectionLabel}>Photos <Text style={styles.optional}>(optional)</Text></Text>
+          <View style={styles.photoRow}>
+            {photos.map((p, i) => (
+              <View key={i} style={styles.photoThumb}>
+                <Image source={{ uri: p.uri }} style={styles.photoImg} />
+                <TouchableOpacity
+                  style={styles.photoRemove}
+                  onPress={() => setPhotos(prev => prev.filter((_, j) => j !== i))}
+                >
+                  <Ionicons name="close-circle" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {photos.length < 5 && (
+              <TouchableOpacity style={styles.photoAdd} onPress={pickPhoto}>
+                <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* ── Save button ── */}
           <TouchableOpacity
             style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
@@ -629,6 +691,20 @@ const styles = StyleSheet.create({
   spentInput: {
     flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text,
     paddingVertical: 13, padding: 0,
+  },
+
+  // Photos
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
+  photoThumb: { width: 72, height: 72, borderRadius: 10, overflow: 'hidden', position: 'relative' },
+  photoImg: { width: '100%', height: '100%' },
+  photoRemove: {
+    position: 'absolute', top: 2, right: 2,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 9,
+  },
+  photoAdd: {
+    width: 72, height: 72, borderRadius: 10, borderWidth: 1,
+    borderColor: COLORS.border, borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white,
   },
 
   // Save

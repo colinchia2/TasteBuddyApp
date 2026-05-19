@@ -9,6 +9,7 @@ import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import { COLORS } from '../constants/colors';
 import MarkdownMessage from '../components/MarkdownMessage';
+import TBLogo from '../components/TBLogo';
 
 const TOP_TILES = [
   {
@@ -183,17 +184,15 @@ export default function HomeScreen({ navigation, route }) {
       keyboardVerticalOffset={0}
     >
       <SafeAreaView style={styles.safe}>
-        {/* Header */}
+        {/* Header — always visible, even during chat */}
         <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.greeting}>
-              {chatActive ? 'Ask TasteBuddy AI' : `Hi ${firstName},`}
+          <TouchableOpacity onPress={resetChat} activeOpacity={0.75} style={styles.logoBtn}>
+            <TBLogo size={40} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.greeting, chatActive && styles.greetingChat]}>
+              {chatActive ? 'Ask TasteBuddy AI' : `Hi ${firstName}`}
             </Text>
-            {!chatActive && (
-              <Text style={styles.sub}>
-                let's check in a visit or Ask TasteBuddy AI Anything!
-              </Text>
-            )}
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity
@@ -365,15 +364,17 @@ const styles = StyleSheet.create({
 
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingRight: 10,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
+  logoBtn: { padding: 2 },
   greeting: { fontFamily: 'Outfit_800ExtraBold', fontSize: 22, color: COLORS.text },
-  sub: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted, marginTop: 3, lineHeight: 18 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 2 },
-  iconBtn: { padding: 4 },
+  greetingChat: { fontSize: 16 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  iconBtn: { padding: 3 },
   avatar: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.gold,
     alignItems: 'center', justifyContent: 'center',

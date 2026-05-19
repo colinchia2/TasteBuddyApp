@@ -2,32 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ActivityIndicator,
 } from 'react-native';
-
-function TBLogo({ size = 80 }) {
-  const r = size / 2;
-  const eye = size * 0.08;
-  return (
-    <View style={{
-      width: size, height: size, borderRadius: r,
-      backgroundColor: '#FFD93D', alignItems: 'center', justifyContent: 'center',
-      shadowColor: '#C8960C', shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
-    }}>
-      {/* Eyes */}
-      <View style={{ flexDirection: 'row', gap: size * 0.2, marginBottom: size * 0.06 }}>
-        <View style={{ width: eye, height: eye, borderRadius: eye / 2, backgroundColor: '#5D4E37' }} />
-        <View style={{ width: eye, height: eye, borderRadius: eye / 2, backgroundColor: '#5D4E37' }} />
-      </View>
-      {/* Smile arc via border */}
-      <View style={{
-        width: size * 0.42, height: size * 0.21,
-        borderBottomWidth: size * 0.04, borderBottomColor: '#5D4E37',
-        borderLeftWidth: 0, borderRightWidth: 0,
-        borderBottomLeftRadius: size * 0.21, borderBottomRightRadius: size * 0.21,
-      }} />
-    </View>
-  );
-}
+import TBLogo from '../components/TBLogo';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { useAuth } from '../auth/AuthContext';

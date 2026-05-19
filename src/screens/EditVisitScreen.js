@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView,
+  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { api } from '../api/client';
+import * as ImagePicker from 'expo-image-picker';
+import { api, BASE_URL } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
 
 function fmtDate(d) {
@@ -34,7 +35,7 @@ const TOD_CHIPS = [
 
 export default function EditVisitScreen({ navigation, route }) {
   const {
-    visitId, placeName,
+    visitId, placeId, placeName,
     tier: initialTier,
     occasion: initialOccasion,
     notes: initialNotes,
@@ -54,6 +55,56 @@ export default function EditVisitScreen({ navigation, route }) {
   const [partySize, setPartySize] = useState(initialPartySize || null);
   const [totalSpent, setTotalSpent] = useState(initialSpending ? String(initialSpending) : '');
   const [loading, setLoading] = useState(false);
+  const [existingPhotos, setExistingPhotos] = useState([]); // [{id, url}]
+  const [newPhotos, setNewPhotos] = useState([]); // [{uri}]
+
+  useEffect(() => {
+    if (visitId) {
+      api.json(`/api/photos?visit_id=${visitId}`)
+        .then(data => setExistingPhotos(data))
+        .catch(() => {});
+    }
+  }, [visitId]);
+
+  async function pickPhoto() {
+    if (existingPhotos.length + newPhotos.length >= 5) { Alert.alert('Max 5 photos'); return; }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission needed', 'Allow photo access in Settings.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: false,
+      quality: 0.9,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const photo = { uri: result.assets[0].uri };
+      setNewPhotos(prev => [...prev, photo]);
+      // Upload immediately
+      try {
+        if (placeId) {
+          const formData = new FormData();
+          const filename = photo.uri.split('/').pop();
+          formData.append('file', { uri: photo.uri, name: filename, type: 'image/jpeg' });
+          formData.append('place_id', String(placeId));
+          formData.append('visit_id', String(visitId));
+          const data = await api.upload('/api/photos/upload', formData);
+          setNewPhotos(prev => prev.filter(p => p.uri !== photo.uri));
+          setExistingPhotos(prev => [...prev, { id: data.photo_id, url: data.url }]);
+        }
+      } catch (e) {
+        setNewPhotos(prev => prev.filter(p => p.uri !== photo.uri));
+        Alert.alert('Upload failed', e.message);
+      }
+    }
+  }
+
+  async function deleteExistingPhoto(photoId) {
+    try {
+      await api.json(`/api/photos/delete/${photoId}`, { method: 'DELETE' });
+      setExistingPhotos(prev => prev.filter(p => p.id !== photoId));
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    }
+  }
 
   function onDateChange(event, date) {
     setShowDatePicker(false);
@@ -236,6 +287,35 @@ export default function EditVisitScreen({ navigation, route }) {
             </View>
           </View>
 
+          {/* Photos */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Photos <Text style={styles.optional}>(optional)</Text></Text>
+            <View style={styles.photoRow}>
+              {existingPhotos.map(p => (
+                <View key={p.id} style={styles.photoThumb}>
+                  <Image source={{ uri: p.url.startsWith('http') ? p.url : `${BASE_URL}${p.url}` }} style={styles.photoImg} />
+                  <TouchableOpacity
+                    style={styles.photoRemove}
+                    onPress={() => deleteExistingPhoto(p.id)}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {newPhotos.map((p, i) => (
+                <View key={`new-${i}`} style={[styles.photoThumb, { opacity: 0.5 }]}>
+                  <Image source={{ uri: p.uri }} style={styles.photoImg} />
+                  <ActivityIndicator size="small" color="#fff" style={{ position: 'absolute', top: 26, left: 26 }} />
+                </View>
+              ))}
+              {existingPhotos.length + newPhotos.length < 5 && (
+                <TouchableOpacity style={styles.photoAdd} onPress={pickPhoto}>
+                  <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
           <View style={{ height: 40 }} />
         </ScrollView>
       </SafeAreaView>
@@ -301,4 +381,17 @@ const styles = StyleSheet.create({
   },
   spentPrefix: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginRight: 4 },
   spentInput: { flex: 1, fontSize: 15, color: COLORS.text, paddingVertical: 13, padding: 0 },
+  optional: { fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: 11 },
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  photoThumb: { width: 72, height: 72, borderRadius: 10, overflow: 'hidden', position: 'relative' },
+  photoImg: { width: '100%', height: '100%' },
+  photoRemove: {
+    position: 'absolute', top: 2, right: 2,
+    backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 9,
+  },
+  photoAdd: {
+    width: 72, height: 72, borderRadius: 10, borderWidth: 1,
+    borderColor: COLORS.border, borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white,
+  },
 });
