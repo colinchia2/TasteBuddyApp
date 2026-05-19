@@ -62,6 +62,7 @@ export default function ActivityScreen({ navigation }) {
         tier: item.tier || '',
         occasion: item.occasion || '',
         notes: item.notes || '',
+        visited_at: item.visited_at || null,
       });
     } else if (item.type === 'new_place' && item.user_place_id) {
       navigation.navigate('EditPlace', {

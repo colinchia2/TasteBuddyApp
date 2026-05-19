@@ -10,7 +10,7 @@ import { api } from '../api/client';
 import { COLORS } from '../constants/colors';
 import MarkdownMessage from '../components/MarkdownMessage';
 
-const TILES = [
+const TOP_TILES = [
   {
     id: 'log',
     title: 'Log a Visit',
@@ -19,7 +19,6 @@ const TILES = [
     bg: COLORS.gold,
     iconColor: '#fff',
     textColor: '#fff',
-    border: false,
     screen: 'CheckIn',
   },
   {
@@ -30,7 +29,6 @@ const TILES = [
     bg: '#1C1C1E',
     iconColor: '#fff',
     textColor: '#fff',
-    border: false,
     screen: 'AddPlace',
   },
 ];
@@ -78,6 +76,7 @@ export default function HomeScreen({ navigation, route }) {
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
   const scrollRef = useRef(null);
+  const chatInputRef = useRef(null);
   const phaseTimerRef = useRef(null);
 
   useEffect(() => {
@@ -161,6 +160,11 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
+  function activateAI() {
+    setChatActive(true);
+    setTimeout(() => chatInputRef.current?.focus(), 200);
+  }
+
   function resetChat() {
     stopPhaseTimer();
     setChatActive(false);
@@ -223,23 +227,29 @@ export default function HomeScreen({ navigation, route }) {
 
         {/* Tiles — hidden when chat is active */}
         {!chatActive && (
-          <View style={styles.tileRow}>
-            {TILES.map(tile => (
-              <TouchableOpacity
-                key={tile.id}
-                style={[
-                  styles.tile,
-                  { backgroundColor: tile.bg },
-                  tile.border && { borderWidth: 0.5, borderColor: COLORS.border },
-                ]}
-                onPress={() => navigation.navigate(tile.screen)}
-                activeOpacity={0.82}
-              >
-                <Ionicons name={tile.icon} size={32} color={tile.iconColor} style={styles.tileIcon} />
-                <Text style={[styles.tileTitle, { color: tile.textColor }]}>{tile.title}</Text>
-                <Text style={[styles.tileSub, { color: tile.textColor }]}>{tile.subtitle}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.tilesContainer}>
+            <View style={styles.tileRow}>
+              {TOP_TILES.map(tile => (
+                <TouchableOpacity
+                  key={tile.id}
+                  style={[styles.tile, { backgroundColor: tile.bg }]}
+                  onPress={() => navigation.navigate(tile.screen)}
+                  activeOpacity={0.82}
+                >
+                  <Ionicons name={tile.icon} size={32} color={tile.iconColor} style={styles.tileIcon} />
+                  <Text style={[styles.tileTitle, { color: tile.textColor }]}>{tile.title}</Text>
+                  <Text style={[styles.tileSub, { color: tile.textColor }]}>{tile.subtitle}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.aiTile} onPress={activateAI} activeOpacity={0.82}>
+              <Ionicons name="chatbubble-ellipses" size={26} color={COLORS.gold} style={{ marginRight: 14 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.aiTileTitle}>Ask TasteBuddy AI Anything</Text>
+                <Text style={styles.aiTileSub}>Get personalized recommendations</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.gold} />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -319,6 +329,7 @@ export default function HomeScreen({ navigation, route }) {
           )}
           <View style={styles.inputRow}>
             <TextInput
+              ref={chatInputRef}
               style={styles.input}
               placeholder="Ask TasteBuddy AI anything…"
               placeholderTextColor={COLORS.textLight}
@@ -369,11 +380,20 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontFamily: 'Outfit_700Bold', color: '#fff', fontSize: 15 },
 
-  tileRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, marginBottom: 16, height: 180 },
+  tilesContainer: { paddingHorizontal: 16, marginBottom: 16, gap: 10 },
+  tileRow: { flexDirection: 'row', gap: 10, height: 160 },
   tile: { flex: 1, borderRadius: 20, padding: 18, justifyContent: 'flex-end' },
   tileIcon: { marginBottom: 'auto' },
   tileTitle: { fontFamily: 'Outfit_700Bold', fontSize: 15, marginTop: 20, marginBottom: 3 },
   tileSub: { fontFamily: 'DMSans_400Regular', fontSize: 11, opacity: 0.75, lineHeight: 15 },
+  aiTile: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.white, borderRadius: 16,
+    borderWidth: 1, borderColor: COLORS.gold,
+    paddingHorizontal: 18, paddingVertical: 14,
+  },
+  aiTileTitle: { fontFamily: 'Outfit_700Bold', fontSize: 15, color: COLORS.text },
+  aiTileSub: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
 
   chatScroll: { flex: 1 },
   chatContent: { padding: 16, paddingBottom: 8 },

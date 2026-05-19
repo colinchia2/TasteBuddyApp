@@ -1,0 +1,35 @@
+export const COLORS = {
+  gold: '#C8960C',
+  goldLight: '#FAEEDA',
+  white: '#FFFFFF',
+  offWhite: '#FAFAF8',
+  border: '#E0DDD8',
+  borderLight: '#F5F3F0',
+  text: '#1A1A1A',
+  textMuted: '#888888',
+  textLight: '#BBBBBB',
+  danger: '#E24B4A',
+  dangerLight: '#FCEBEB',
+
+  tierS: '#FAEEDA',
+  tierSText: '#633806',
+  tierA: '#EAF3DE',
+  tierAText: '#27500A',
+  tierB: '#E6F1FB',
+  tierBText: '#0C447C',
+  tierC: '#F1EFE8',
+  tierCText: '#5F5E5A',
+  tierNextUp: '#FCEBEB',
+  tierNextUpText: '#791F1F',
+  tierTBE: '#FEFCE8',
+  tierTBEText: '#713F12',
+};
+
+export const TIER_COLORS = {
+  S: { bg: '#FAEEDA', text: '#633806', label: 'S Tier' },
+  A: { bg: '#EAF3DE', text: '#27500A', label: 'A Tier' },
+  B: { bg: '#E6F1FB', text: '#0C447C', label: 'B Tier' },
+  C: { bg: '#F1EFE8', text: '#5F5E5A', label: 'C Tier' },
+  NEXT_UP: { bg: '#FCEBEB', text: '#791F1F', label: 'Next Up' },
+  TBE: { bg: '#FEFCE8', text: '#713F12', label: 'TBE' },
+};
