@@ -81,15 +81,18 @@ export default function PairwiseScreen({ navigation, route }) {
 
         {/* Header */}
         <View style={styles.headerBlock}>
-          <Text style={styles.category}>Ranking in {category} · S-Tier</Text>
-          <Text style={styles.title}>Where does it rank?</Text>
+          <Text style={styles.rankingLine}>
+            {'You\'re ranking: '}
+            <Text style={styles.rankingBold}>{newPlace?.name}</Text>
+            {' for '}
+            <Text style={styles.rankingBold}>{category}</Text>
+            {' S-Tier'}
+          </Text>
           {/* Progress bar */}
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
           </View>
-          <Text style={styles.progressLabel}>
-            Comparing {vsIdx + 1} of {total}
-          </Text>
+          <Text style={styles.progressLabel}>{vsIdx + 1} of {total}</Text>
         </View>
 
         {/* Cards */}
@@ -101,7 +104,7 @@ export default function PairwiseScreen({ navigation, route }) {
               disabled={saving}
               activeOpacity={0.75}
             >
-              <Text style={styles.cardTag}>New</Text>
+              <Text style={styles.cardTagNew}>NEW ✦</Text>
               <Text style={styles.cardName}>{newPlace?.name}</Text>
               {newPlace?.cuisine ? <Text style={styles.cardMeta}>{newPlace.cuisine}</Text> : null}
             </TouchableOpacity>
@@ -112,7 +115,7 @@ export default function PairwiseScreen({ navigation, route }) {
               disabled={saving}
               activeOpacity={0.75}
             >
-              <Text style={[styles.cardTag, { color: COLORS.textMuted }]}>#{vsIdx + 1} now</Text>
+              <Text style={styles.cardTagExisting}>#{vsIdx + 1} CURRENTLY</Text>
               <Text style={styles.cardName}>{vsPlace.name}</Text>
               {vsPlace.cuisine ? <Text style={styles.cardMeta}>{vsPlace.cuisine}</Text> : null}
             </TouchableOpacity>
@@ -123,18 +126,21 @@ export default function PairwiseScreen({ navigation, route }) {
           </View>
         )}
 
-        <Text style={styles.vs}>VS</Text>
-
-        {/* Skip actions */}
-        <TouchableOpacity onPress={skipToBottom} disabled={saving} style={styles.skipBtn}>
-          <Text style={styles.skipText}>Skip — place at bottom of S-Tier</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Resort', { category })}
-          style={styles.skipBtn}
-        >
-          <Text style={styles.skipText}>Prefer to drag to reorder instead? →</Text>
-        </TouchableOpacity>
+        {/* Other options */}
+        <View style={styles.altSection}>
+          <Text style={styles.altLabel}>Other options for ranking</Text>
+          <View style={styles.altRow}>
+            <TouchableOpacity onPress={skipToBottom} disabled={saving} style={styles.altBtn}>
+              <Text style={styles.altBtnText}>Skip — rank at bottom</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Resort', { category })}
+              style={styles.altBtn}
+            >
+              <Text style={styles.altBtnText}>Drag and Drop Full List</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
       </ScrollView>
     </SafeAreaView>
@@ -146,13 +152,11 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
   headerBlock: { alignItems: 'center', marginBottom: 32 },
-  category: {
-    fontSize: 11, fontWeight: '700', color: '#bbb', textTransform: 'uppercase',
-    letterSpacing: 0.6, marginBottom: 10, fontFamily: 'DMSans_700Bold',
+  rankingLine: {
+    fontSize: 14, color: '#888', fontFamily: 'DMSans_400Regular',
+    textAlign: 'center', marginBottom: 16, lineHeight: 22,
   },
-  title: {
-    fontFamily: 'Outfit_700Bold', fontSize: 22, color: '#1a1a1a', marginBottom: 16,
-  },
+  rankingBold: { color: '#1a1a1a', fontFamily: 'DMSans_700Bold' },
   progressTrack: {
     backgroundColor: '#f0f0ee', borderRadius: 20, height: 6, width: 220, marginBottom: 8,
   },
@@ -166,8 +170,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#e0ddd8',
     padding: 20, alignItems: 'center',
   },
-  cardTag: {
+  cardTagNew: {
     fontSize: 10, fontWeight: '700', color: COLORS.gold,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10,
+    fontFamily: 'DMSans_700Bold',
+  },
+  cardTagExisting: {
+    fontSize: 10, fontWeight: '700', color: '#888',
     textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10,
     fontFamily: 'DMSans_700Bold',
   },
@@ -178,11 +187,17 @@ const styles = StyleSheet.create({
   cardMeta: {
     fontSize: 11, color: '#888', fontFamily: 'DMSans_400Regular', textAlign: 'center',
   },
-  vs: {
-    textAlign: 'center', fontSize: 13, fontWeight: '700', color: '#ccc',
-    fontFamily: 'DMSans_700Bold', marginBottom: 28,
+  altSection: { alignItems: 'center', marginTop: 24 },
+  altLabel: {
+    fontSize: 11, fontWeight: '700', color: '#888', textTransform: 'uppercase',
+    letterSpacing: 0.5, marginBottom: 10, fontFamily: 'DMSans_700Bold',
   },
-  skipBtn: { alignItems: 'center', paddingVertical: 8 },
-  skipText: { fontSize: 12, color: '#bbb', fontFamily: 'DMSans_400Regular' },
+  altRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
+  altBtn: {
+    paddingHorizontal: 20, paddingVertical: 8,
+    borderWidth: 1, borderColor: COLORS.gold, borderRadius: 20,
+    backgroundColor: '#fff',
+  },
+  altBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.gold, fontFamily: 'DMSans_700Bold' },
   emptyText: { fontSize: 14, color: COLORS.textMuted, fontFamily: 'DMSans_400Regular' },
 });

@@ -99,6 +99,7 @@ export default function CheckInScreen({ navigation }) {
       navigation.replace('LogVisit', {
         placeId: checkedIn.place_id,
         placeName: checkedIn.name,
+        checkinId: checkedIn.checkin_id,
       });
     } else {
       navigation.replace('AddPlace', {
@@ -107,6 +108,7 @@ export default function CheckInScreen({ navigation }) {
         onDone: () => navigation.replace('LogVisit', {
           placeId: checkedIn.place_id,
           placeName: checkedIn.name,
+          checkinId: checkedIn.checkin_id,
         }),
       });
     }

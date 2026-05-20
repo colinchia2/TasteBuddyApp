@@ -48,7 +48,7 @@ function displayTime(totalMins) {
 function formatDateDisplay(isoDate) {
   if (!isoDate) return '';
   const [y, m, d] = isoDate.split('-');
-  return `${d}/${m}/${y}`;
+  return `${m}/${d}/${y}`;
 }
 
 function buildDateChips() {
@@ -120,6 +120,7 @@ export default function LogVisitScreen({ navigation, route }) {
   const [categories, setCategories] = useState([]); // [{user_place_id, tier, category, cuisine}]
   const [checkedCats, setCheckedCats] = useState({}); // { user_place_id: true }
   const [catTiers, setCatTiers] = useState({}); // { user_place_id: tierStr }
+  const origCatTiersRef = useRef({}); // original tiers at load time — used to guard pairwise
   const [loadingCats, setLoadingCats] = useState(false);
 
   // Form state
@@ -153,6 +154,7 @@ export default function LogVisitScreen({ navigation, route }) {
       data.forEach(c => { checked[c.user_place_id] = true; tiers[c.user_place_id] = c.tier; });
       setCheckedCats(checked);
       setCatTiers(tiers);
+      origCatTiersRef.current = tiers;
     } catch {
       setCategories([]);
     } finally {
@@ -293,7 +295,12 @@ export default function LogVisitScreen({ navigation, route }) {
       if (photos.length > 0 && data.visit_id) {
         await uploadPhotos(data.visit_id, placeId);
       }
-      if (data.pairwise_data) {
+      const tierChangedToS = activeCats.some(c => {
+        const newTier = catTiers[c.user_place_id] || c.tier;
+        const origTier = origCatTiersRef.current[c.user_place_id];
+        return newTier === 'S' && origTier !== 'S';
+      });
+      if (data.pairwise_data && tierChangedToS) {
         navigation.replace('Pairwise', {
           newId: data.pairwise_data.new_id,
           category: data.pairwise_data.category,

@@ -19,7 +19,7 @@ function fmtDate(d) {
 function formatDateDisplay(isoDate) {
   if (!isoDate) return '';
   const [y, m, d] = isoDate.split('-');
-  return `${d}/${m}/${y}`;
+  return `${m}/${d}/${y}`;
 }
 
 const OCCASIONS = ['Date night', 'Solo', 'Business', 'Family', 'Friends', 'Special occasion'];
