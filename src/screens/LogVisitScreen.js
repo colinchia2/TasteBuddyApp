@@ -133,6 +133,7 @@ export default function LogVisitScreen({ navigation, route }) {
   const [addCatCuisine, setAddCatCuisine] = useState('');
   const [addCatTier, setAddCatTier] = useState('TBE');
   const [addCatSaving, setAddCatSaving] = useState(false);
+  const [addCatSuccessMsg, setAddCatSuccessMsg] = useState('');
 
   // Form state
   const [dateChips] = useState(buildDateChips);
@@ -178,7 +179,13 @@ export default function LogVisitScreen({ navigation, route }) {
     try {
       const data = await api.json('/api/places/users/categories');
       const existingNames = categories.map(c => c.category);
-      setAllCategories((data || []).filter(c => !existingNames.includes(c.name)));
+      const available = (data || []).filter(c => !existingNames.includes(c.name));
+      const PRIMARY_ORDER = ['Breakfast', 'Lunch', 'Dinner'];
+      const primaryCats = available.filter(c => PRIMARY_ORDER.includes(c.name))
+        .sort((a, b) => PRIMARY_ORDER.indexOf(a.name) - PRIMARY_ORDER.indexOf(b.name));
+      const otherCats = available.filter(c => !PRIMARY_ORDER.includes(c.name))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setAllCategories([...primaryCats, ...otherCats]);
     } catch {
       setAllCategories([]);
     }
@@ -191,6 +198,14 @@ export default function LogVisitScreen({ navigation, route }) {
     if (!addCatCuisine.trim()) {
       Alert.alert('Enter a cuisine'); return;
     }
+    // FIX 3: Frontend duplicate check for custom name
+    if (addCatCustom.trim()) {
+      const existingNames = categories.map(c => c.category.toLowerCase());
+      if (existingNames.includes(addCatCustom.trim().toLowerCase())) {
+        Alert.alert('Already added', `This place already has "${addCatCustom.trim()}".`); return;
+      }
+    }
+    const finalName = addCatSelected?.name || addCatCustom.trim();
     setAddCatSaving(true);
     try {
       let catId = addCatSelected?.id;
@@ -205,11 +220,14 @@ export default function LogVisitScreen({ navigation, route }) {
         method: 'POST',
         body: JSON.stringify({ category_id: catId, cuisine: addCatCuisine.trim(), tier: addCatTier }),
       });
-      await loadCategories(placeId);
+      await loadCategories(placeId); // closes form, auto-checks the new category
       setAddCatSelected(null);
       setAddCatCustom('');
       setAddCatCuisine('');
       setAddCatTier('TBE');
+      // FIX 4: Show success toast
+      setAddCatSuccessMsg(`✓ ${finalName} added and selected!`);
+      setTimeout(() => setAddCatSuccessMsg(''), 3000);
     } catch (e) {
       Alert.alert('Error', e.message);
       setShowAddCat(false);
@@ -497,7 +515,11 @@ export default function LogVisitScreen({ navigation, route }) {
                   {Object.entries(TIER_COLORS).map(([t, tc]) => (
                     <TouchableOpacity
                       key={t}
-                      style={[styles.addCatTierChip, { backgroundColor: addCatTier === t ? tc.bg : COLORS.borderLight }]}
+                      style={[
+                        styles.addCatTierChip,
+                        { backgroundColor: addCatTier === t ? tc.bg : COLORS.borderLight },
+                        addCatTier === t && { borderColor: COLORS.gold },
+                      ]}
                       onPress={() => setAddCatTier(t)}
                     >
                       <Text style={[styles.addCatTierText, { color: addCatTier === t ? tc.text : COLORS.textMuted }]}>
@@ -527,6 +549,9 @@ export default function LogVisitScreen({ navigation, route }) {
               </TouchableOpacity>
             )
           )}
+          {addCatSuccessMsg ? (
+            <Text style={styles.addCatSuccessMsg}>{addCatSuccessMsg}</Text>
+          ) : null}
 
           {/* ── 2. Date ── */}
           <Text style={styles.sectionLabel}>Date</Text>
@@ -871,8 +896,13 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, marginBottom: 8,
   },
   addCatTierRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  addCatTierChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  addCatTierChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 2, borderColor: 'transparent' },
   addCatTierText: { fontFamily: 'DMSans_700Bold', fontSize: 12 },
+  addCatSuccessMsg: {
+    fontFamily: 'DMSans_700Bold', fontSize: 13, color: '#27500A',
+    backgroundColor: '#EAF3DE', borderRadius: 8, paddingHorizontal: 12,
+    paddingVertical: 8, marginBottom: 10,
+  },
   addCatActions: { flexDirection: 'row', gap: 8 },
   addCatSaveBtn: {
     backgroundColor: COLORS.gold, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 9,

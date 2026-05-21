@@ -84,7 +84,7 @@ All require `Authorization: Bearer <token>` header.
 - `DELETE /api/chat/sessions/<id>` — archive session
 - `GET /api/chat/sessions/<id>/messages` — messages in a session
 - `POST /api/chat/sessions/<id>/rename` — rename a session
-- `POST /api/ask` — AI chat
+- `POST /api/ask/chat` — AI chat
 - `GET /api/notifications?limit=30` — user notifications
 - `POST /api/notifications/mark-read` — mark all as read
 - `GET /api/photos?visit_id=X` — list photos for a visit (JWT)

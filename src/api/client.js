@@ -51,7 +51,12 @@ export const api = {
 
   async json(path, options) {
     const res = await apiFetch(path, options);
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server error (${res.status})`);
+    }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   },
@@ -69,7 +74,12 @@ export const api = {
         throw new Error('SESSION_EXPIRED');
       }
     }
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server error (${res.status})`);
+    }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   },
