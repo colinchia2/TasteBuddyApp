@@ -104,15 +104,17 @@ export default function LogVisitScreen({ navigation, route }) {
   const paramPlaceId = route.params?.placeId;
   const paramPlaceName = route.params?.placeName;
   const paramCheckinId = route.params?.checkinId || null;
+  const paramPrefillSearch = route.params?.prefillSearch || '';
+  const paramFromActionCard = route.params?.fromActionCard || null;
 
   // Phase: 'choice' | 'search' | 'form'
-  const [phase, setPhase] = useState(paramPlaceId ? 'form' : 'choice');
+  const [phase, setPhase] = useState(paramPlaceId ? 'form' : paramPrefillSearch ? 'search' : 'choice');
   const searchInputRef = useRef(null);
 
   // Place state
   const [placeId, setPlaceId] = useState(paramPlaceId || null);
   const [placeName, setPlaceName] = useState(paramPlaceName || '');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(paramPrefillSearch);
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
 
@@ -122,6 +124,15 @@ export default function LogVisitScreen({ navigation, route }) {
   const [catTiers, setCatTiers] = useState({}); // { user_place_id: tierStr }
   const origCatTiersRef = useRef({}); // original tiers at load time — used to guard pairwise
   const [loadingCats, setLoadingCats] = useState(false);
+
+  // Add-category inline form
+  const [showAddCat, setShowAddCat] = useState(false);
+  const [allCategories, setAllCategories] = useState([]);
+  const [addCatSelected, setAddCatSelected] = useState(null); // { id, name }
+  const [addCatCustom, setAddCatCustom] = useState('');
+  const [addCatCuisine, setAddCatCuisine] = useState('');
+  const [addCatTier, setAddCatTier] = useState('TBE');
+  const [addCatSaving, setAddCatSaving] = useState(false);
 
   // Form state
   const [dateChips] = useState(buildDateChips);
@@ -145,6 +156,7 @@ export default function LogVisitScreen({ navigation, route }) {
 
   async function loadCategories(id) {
     setLoadingCats(true);
+    setShowAddCat(false);
     try {
       const data = await api.json(`/api/places/${id}/categories-mobile`);
       setCategories(data);
@@ -159,6 +171,50 @@ export default function LogVisitScreen({ navigation, route }) {
       setCategories([]);
     } finally {
       setLoadingCats(false);
+    }
+  }
+
+  async function loadAllCategories() {
+    try {
+      const data = await api.json('/api/places/users/categories');
+      const existingNames = categories.map(c => c.category);
+      setAllCategories((data || []).filter(c => !existingNames.includes(c.name)));
+    } catch {
+      setAllCategories([]);
+    }
+  }
+
+  async function submitAddCategory() {
+    if (!addCatSelected && !addCatCustom.trim()) {
+      Alert.alert('Select or type a category name'); return;
+    }
+    if (!addCatCuisine.trim()) {
+      Alert.alert('Enter a cuisine'); return;
+    }
+    setAddCatSaving(true);
+    try {
+      let catId = addCatSelected?.id;
+      if (!catId && addCatCustom.trim()) {
+        const catResp = await api.json('/api/places/users/categories', {
+          method: 'POST',
+          body: JSON.stringify({ name: addCatCustom.trim() }),
+        });
+        catId = catResp.id;
+      }
+      await api.json(`/api/places/${placeId}/add-category-mobile`, {
+        method: 'POST',
+        body: JSON.stringify({ category_id: catId, cuisine: addCatCuisine.trim(), tier: addCatTier }),
+      });
+      await loadCategories(placeId);
+      setAddCatSelected(null);
+      setAddCatCustom('');
+      setAddCatCuisine('');
+      setAddCatTier('TBE');
+    } catch (e) {
+      Alert.alert('Error', e.message);
+      setShowAddCat(false);
+    } finally {
+      setAddCatSaving(false);
     }
   }
 
@@ -305,6 +361,8 @@ export default function LogVisitScreen({ navigation, route }) {
           newId: data.pairwise_data.new_id,
           category: data.pairwise_data.category,
         });
+      } else if (paramFromActionCard) {
+        navigation.navigate('Home', { actionCompleted: paramFromActionCard });
       } else {
         Alert.alert('Visit logged!', '', [{ text: 'OK', onPress: () => navigation.goBack() }]);
       }
@@ -395,6 +453,80 @@ export default function LogVisitScreen({ navigation, route }) {
                   </TouchableOpacity>
                 ))
           }
+
+          {/* ── Add category inline form ── */}
+          {!loadingCats && (
+            showAddCat ? (
+              <View style={styles.addCatForm}>
+                <Text style={styles.addCatFormTitle}>Add a category</Text>
+
+                <View style={styles.addCatPillRow}>
+                  {allCategories.map(cat => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[styles.addCatPill, addCatSelected?.id === cat.id && styles.addCatPillSelected]}
+                      onPress={() => { setAddCatSelected(cat); setAddCatCustom(''); }}
+                    >
+                      <Text style={[styles.addCatPillText, addCatSelected?.id === cat.id && styles.addCatPillTextSelected]}>
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  {allCategories.length === 0 && (
+                    <Text style={styles.addCatEmptyNote}>All your categories are already added.</Text>
+                  )}
+                </View>
+
+                <TextInput
+                  style={styles.addCatInput}
+                  value={addCatCustom}
+                  onChangeText={t => { setAddCatCustom(t); setAddCatSelected(null); }}
+                  placeholder="Or type a new category…"
+                  placeholderTextColor={COLORS.textLight}
+                />
+
+                <TextInput
+                  style={styles.addCatInput}
+                  value={addCatCuisine}
+                  onChangeText={setAddCatCuisine}
+                  placeholder="Cuisine (e.g. Italian)"
+                  placeholderTextColor={COLORS.textLight}
+                />
+
+                <View style={styles.addCatTierRow}>
+                  {Object.entries(TIER_COLORS).map(([t, tc]) => (
+                    <TouchableOpacity
+                      key={t}
+                      style={[styles.addCatTierChip, { backgroundColor: addCatTier === t ? tc.bg : COLORS.borderLight }]}
+                      onPress={() => setAddCatTier(t)}
+                    >
+                      <Text style={[styles.addCatTierText, { color: addCatTier === t ? tc.text : COLORS.textMuted }]}>
+                        {tc.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.addCatActions}>
+                  <TouchableOpacity style={styles.addCatSaveBtn} onPress={submitAddCategory} disabled={addCatSaving}>
+                    {addCatSaving
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.addCatSaveBtnText}>Add</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.addCatCancelBtn} onPress={() => setShowAddCat(false)}>
+                    <Text style={styles.addCatCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.addCatBtn}
+                onPress={() => { setShowAddCat(true); loadAllCategories(); }}
+              >
+                <Text style={styles.addCatBtnText}>+ Add category</Text>
+              </TouchableOpacity>
+            )
+          )}
 
           {/* ── 2. Date ── */}
           <Text style={styles.sectionLabel}>Date</Text>
@@ -713,6 +845,45 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border, borderStyle: 'dashed',
     alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white,
   },
+
+  // Add category inline form
+  addCatBtn: { marginTop: 2, marginBottom: 14 },
+  addCatBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.gold },
+  addCatForm: {
+    backgroundColor: '#FEFCE8', borderRadius: 12, padding: 14,
+    borderWidth: 0.5, borderColor: '#D97706', marginTop: 2, marginBottom: 14,
+  },
+  addCatFormTitle: {
+    fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#713F12',
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10,
+  },
+  addCatPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  addCatPill: {
+    backgroundColor: '#85B7EB', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+  },
+  addCatPillSelected: { backgroundColor: '#042C53' },
+  addCatPillText: { fontFamily: 'DMSans_700Bold', fontSize: 12, color: '#042C53' },
+  addCatPillTextSelected: { color: '#fff' },
+  addCatEmptyNote: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted },
+  addCatInput: {
+    backgroundColor: '#fff', borderRadius: 10, borderWidth: 0.5,
+    borderColor: COLORS.border, paddingHorizontal: 12, paddingVertical: 10,
+    fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, marginBottom: 8,
+  },
+  addCatTierRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  addCatTierChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  addCatTierText: { fontFamily: 'DMSans_700Bold', fontSize: 12 },
+  addCatActions: { flexDirection: 'row', gap: 8 },
+  addCatSaveBtn: {
+    backgroundColor: COLORS.gold, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 9,
+    alignItems: 'center', justifyContent: 'center', minWidth: 60,
+  },
+  addCatSaveBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: '#fff' },
+  addCatCancelBtn: {
+    borderWidth: 0.5, borderColor: COLORS.border, borderRadius: 20,
+    paddingHorizontal: 20, paddingVertical: 9,
+  },
+  addCatCancelBtnText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted },
 
   // Save
   saveBtn: {

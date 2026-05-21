@@ -10,6 +10,10 @@ import { api } from '../api/client';
 import { COLORS } from '../constants/colors';
 import MarkdownMessage from '../components/MarkdownMessage';
 import TBLogo from '../components/TBLogo';
+import AddPlaceActionCard from '../components/actions/AddPlaceActionCard';
+import LogVisitActionCard from '../components/actions/LogVisitActionCard';
+import SetReminderActionCard from '../components/actions/SetReminderActionCard';
+import AddCategoryActionCard from '../components/actions/AddCategoryActionCard';
 
 const TOP_TILES = [
   {
@@ -76,6 +80,7 @@ export default function HomeScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
+  const [completedActions, setCompletedActions] = useState({});
   const scrollRef = useRef(null);
   const chatInputRef = useRef(null);
   const phaseTimerRef = useRef(null);
@@ -94,6 +99,14 @@ export default function HomeScreen({ navigation, route }) {
     // Clear param so navigating back/forward doesn't re-trigger
     navigation.setParams({ continueSession: undefined });
   }, [route?.params?.continueSession]);
+
+  // Mark action cards complete when LogVisit/AddPlace navigate back with actionCompleted
+  useEffect(() => {
+    const cardId = route?.params?.actionCompleted;
+    if (!cardId) return;
+    setCompletedActions(prev => ({ ...prev, [cardId]: true }));
+    navigation.setParams({ actionCompleted: undefined });
+  }, [route?.params?.actionCompleted]);
 
   async function loadSession(session) {
     try {
@@ -145,10 +158,13 @@ export default function HomeScreen({ navigation, route }) {
       stopPhaseTimer();
       setLoadingPhase(LOADING_PHASE_FINAL);
       await new Promise(r => setTimeout(r, 700));
+      const msgIndex = messages.length + 1; // +1 for the user msg just added
       setMessages(prev => [...prev, {
         role: 'ai',
         text: data.response || 'No response received.',
         followUps: getFollowUps(data.mode),
+        actions: data.actions || [],
+        msgIndex,
       }]);
     } catch (e) {
       stopPhaseTimer();
@@ -267,19 +283,42 @@ export default function HomeScreen({ navigation, route }) {
                     <Text style={[styles.bubbleText, styles.bubbleTextUser]}>{msg.text}</Text>
                   </View>
                 ) : (
-                  <View style={[styles.bubble, styles.bubbleAI]}>
-                    <MarkdownMessage text={msg.text} />
-                    {msg.followUps?.length > 0 && (
-                      <View style={styles.followUpRow}>
-                        {msg.followUps.map((fu, j) => (
-                          <TouchableOpacity
-                            key={j}
-                            style={styles.followUpChip}
-                            onPress={() => sendMessage(fu)}
-                          >
-                            <Text style={styles.followUpText}>{fu}</Text>
-                          </TouchableOpacity>
-                        ))}
+                  <View>
+                    <View style={[styles.bubble, styles.bubbleAI]}>
+                      <MarkdownMessage text={msg.text} />
+                      {msg.followUps?.length > 0 && (
+                        <View style={styles.followUpRow}>
+                          {msg.followUps.map((fu, j) => (
+                            <TouchableOpacity
+                              key={j}
+                              style={styles.followUpChip}
+                              onPress={() => sendMessage(fu)}
+                            >
+                              <Text style={styles.followUpText}>{fu}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                    {msg.actions?.length > 0 && (
+                      <View style={styles.actionCards}>
+                        {msg.actions.map((action, j) => {
+                          const cardId = `${i}-${j}`;
+                          const completed = !!completedActions[cardId];
+                          if (action.action === 'add_place') {
+                            return <AddPlaceActionCard key={j} data={action} cardId={cardId} completed={completed} />;
+                          }
+                          if (action.action === 'log_visit') {
+                            return <LogVisitActionCard key={j} data={action} cardId={cardId} completed={completed} />;
+                          }
+                          if (action.action === 'set_reminder') {
+                            return <SetReminderActionCard key={j} data={action} />;
+                          }
+                          if (action.action === 'add_category') {
+                            return <AddCategoryActionCard key={j} data={action} />;
+                          }
+                          return null;
+                        })}
                       </View>
                     )}
                   </View>
@@ -412,6 +451,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.gold, paddingHorizontal: 12, paddingVertical: 7,
   },
   followUpText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.tierSText },
+  actionCards: { marginBottom: 10 },
   loadingCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 0.5,

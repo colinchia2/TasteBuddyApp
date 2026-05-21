@@ -16,6 +16,7 @@ export default function AddPlaceScreen({ navigation, route }) {
   const prefillName = route?.params?.placeName || '';
   const prefillGoogleId = route?.params?.googlePlaceId || '';
   const onDone = route?.params?.onDone;
+  const fromActionCard = route?.params?.fromActionCard || null;
 
   const [step, setStep] = useState(1);
   const [query, setQuery] = useState(prefillName);
@@ -180,7 +181,9 @@ export default function AddPlaceScreen({ navigation, route }) {
           cuisine: cuisine.trim(),
         }),
       });
-      if (onDone) {
+      if (fromActionCard) {
+        navigation.navigate('Home', { actionCompleted: fromActionCard });
+      } else if (onDone) {
         onDone();
       } else {
         Alert.alert('Added!', `${selectedPlace.name} has been added to your list.`, [
