@@ -26,6 +26,16 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function handleNotificationTap(item, navigation) {
+  if (item.type === 'visit_reminder' && item.related_place_id) {
+    navigation.navigate('LogVisit', {
+      placeId: item.related_place_id,
+      placeName: item.place_name || '',
+      checkinId: item.pending_checkin_id || null,
+    });
+  }
+}
+
 export default function NotificationsScreen({ navigation }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,18 +67,28 @@ export default function NotificationsScreen({ navigation }) {
 
   function renderItem({ item }) {
     const iconName = TYPE_ICONS[item.type] || 'notifications-outline';
+    const tappable = item.type === 'visit_reminder' && !!item.related_place_id;
+    const RowWrapper = tappable ? TouchableOpacity : View;
+    const wrapperProps = tappable
+      ? { activeOpacity: 0.75, onPress: () => handleNotificationTap(item, navigation) }
+      : {};
     return (
-      <View style={[styles.row, !item.is_read && styles.rowUnread]}>
+      <RowWrapper style={[styles.row, !item.is_read && styles.rowUnread]} {...wrapperProps}>
         <View style={styles.iconWrap}>
           <Ionicons name={iconName} size={18} color={COLORS.gold} />
         </View>
         <View style={styles.rowContent}>
           {item.title ? <Text style={styles.rowTitle}>{item.title}</Text> : null}
           {item.body ? <Text style={styles.rowBody}>{item.body}</Text> : null}
-          <Text style={styles.rowTime}>{timeAgo(item.created_at)}</Text>
+          <View style={styles.rowFooter}>
+            <Text style={styles.rowTime}>{timeAgo(item.created_at)}</Text>
+            {tappable && (
+              <Text style={styles.rowAction}>Finish logging visit →</Text>
+            )}
+          </View>
         </View>
         {!item.is_read && <View style={styles.unreadDot} />}
-      </View>
+      </RowWrapper>
     );
   }
 
@@ -140,7 +160,9 @@ const styles = StyleSheet.create({
   rowContent: { flex: 1, marginRight: 8 },
   rowTitle: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text, lineHeight: 20 },
   rowBody: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted, marginTop: 2, lineHeight: 18 },
-  rowTime: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight, marginTop: 4 },
+  rowFooter: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+  rowTime: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight },
+  rowAction: { fontFamily: 'DMSans_500Medium', fontSize: 11, color: COLORS.gold },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.gold, marginTop: 6 },
   separator: { height: 0.5, backgroundColor: COLORS.border },
 });

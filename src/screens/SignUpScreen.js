@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
 import { useAuth } from '../auth/AuthContext';
 import { COLORS } from '../constants/colors';
 
@@ -25,9 +26,13 @@ export default function SignUpScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'tastebuddy', preferLocalhost: true });
+  console.log('[SignUpScreen] Google OAuth redirectUri:', redirectUri);
+
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: GOOGLE_WEB_CLIENT_ID,
     iosClientId: GOOGLE_IOS_CLIENT_ID,
+    redirectUri,
   });
 
   useEffect(() => {
