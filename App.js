@@ -22,7 +22,15 @@ import { COLORS } from './src/constants/colors';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
-import OnboardingScreen from './src/screens/OnboardingScreen';
+import OnboardingValuePropScreen from './src/screens/onboarding/OnboardingValuePropScreen';
+import OnboardingProfileScreen from './src/screens/onboarding/OnboardingProfileScreen';
+import OnboardingDinnerScreen from './src/screens/onboarding/OnboardingDinnerScreen';
+import OnboardingCuisineScreen from './src/screens/onboarding/OnboardingCuisineScreen';
+import OnboardingRankScreen from './src/screens/onboarding/OnboardingRankScreen';
+import OnboardingSTierScreen from './src/screens/onboarding/OnboardingSTierScreen';
+import OnboardingMilestoneScreen from './src/screens/onboarding/OnboardingMilestoneScreen';
+import OnboardingMoreCategoriesScreen from './src/screens/onboarding/OnboardingMoreCategoriesScreen';
+import OnboardingAskAIScreen from './src/screens/onboarding/OnboardingAskAIScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import CheckInScreen from './src/screens/CheckInScreen';
 import LogVisitScreen from './src/screens/LogVisitScreen';
@@ -39,6 +47,39 @@ import ResortScreen from './src/screens/ResortScreen';
 import EmailVerificationPendingScreen from './src/screens/EmailVerificationPendingScreen';
 
 const Stack = createNativeStackNavigator();
+
+function stepToScreen(step) {
+  if (!step || step <= 0) return 'ValueProp';
+  if (step === 1) return 'Profile';
+  if (step === 2) return 'Dinner';
+  if (step === 3) return 'Cuisine';
+  if (step === 4) return 'Rank';
+  if (step === 5) return 'STier';
+  if (step === 6) return 'Milestone';
+  if (step === 7) return 'MoreCategories';
+  return 'AskAI';
+}
+
+const OnboardingStack = createNativeStackNavigator();
+
+function OnboardingNavigator({ step }) {
+  return (
+    <OnboardingStack.Navigator
+      initialRouteName={stepToScreen(step)}
+      screenOptions={{ headerShown: false }}
+    >
+      <OnboardingStack.Screen name="ValueProp" component={OnboardingValuePropScreen} />
+      <OnboardingStack.Screen name="Profile" component={OnboardingProfileScreen} />
+      <OnboardingStack.Screen name="Dinner" component={OnboardingDinnerScreen} />
+      <OnboardingStack.Screen name="Cuisine" component={OnboardingCuisineScreen} />
+      <OnboardingStack.Screen name="Rank" component={OnboardingRankScreen} />
+      <OnboardingStack.Screen name="STier" component={OnboardingSTierScreen} />
+      <OnboardingStack.Screen name="Milestone" component={OnboardingMilestoneScreen} />
+      <OnboardingStack.Screen name="MoreCategories" component={OnboardingMoreCategoriesScreen} />
+      <OnboardingStack.Screen name="AskAI" component={OnboardingAskAIScreen} />
+    </OnboardingStack.Navigator>
+  );
+}
 
 function RootNavigator() {
   const { user, loading } = useAuth();
@@ -62,7 +103,9 @@ function RootNavigator() {
       ) : !user.email_confirmed ? (
         <Stack.Screen name="EmailVerificationPending" component={EmailVerificationPendingScreen} />
       ) : !user.onboarding_complete ? (
-        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        <Stack.Screen name="Onboarding">
+          {() => <OnboardingNavigator step={user.onboarding_step || 0} />}
+        </Stack.Screen>
       ) : (
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
