@@ -53,7 +53,10 @@ export default function OnboardingScreen() {
     try {
       await api.json('/api/onboarding/profile', {
         method: 'POST',
-        body: JSON.stringify({ city: city.trim() }),
+        body: JSON.stringify({
+          city: city.trim(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
       });
       setStep(1);
     } catch (e) {
@@ -97,15 +100,22 @@ export default function OnboardingScreen() {
     if (entries.length === 0) { Alert.alert('Tier at least one place'); return; }
     setLoading(true);
     try {
+      const addedPlaces = [];
       for (const [name, tier] of entries) {
         const sugg = suggestions.find(s => s.name === name);
-        await api.json('/api/onboarding/add-place', {
+        const result = await api.json('/api/onboarding/add-place', {
           method: 'POST',
-          body: JSON.stringify({ name, category: sugg?.category }),
+          body: JSON.stringify({ name, category: sugg?.category, tier }),
         });
-        // set-tier immediately after
-        const places = await api.json('/api/onboarding/profile');
-        // simplified: just call complete when done
+        if (result.place_id) {
+          addedPlaces.push({ name, place_id: result.place_id });
+        }
+      }
+      if (addedPlaces.length > 0) {
+        await api.json('/api/onboarding/guess-cuisines', {
+          method: 'POST',
+          body: JSON.stringify({ places: addedPlaces }),
+        });
       }
       await api.json('/api/onboarding/complete', { method: 'POST' });
       await refreshUser();
