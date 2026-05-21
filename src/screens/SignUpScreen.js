@@ -26,7 +26,7 @@ export default function SignUpScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'tastebuddy', preferLocalhost: true });
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
   console.log('[SignUpScreen] Google OAuth redirectUri:', redirectUri);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -108,7 +108,7 @@ export default function SignUpScreen({ navigation }) {
         {/* Google */}
         <TouchableOpacity
           style={styles.googleBtn}
-          onPress={async () => { setError(null); setGoogleLoading(true); await promptAsync(); }}
+          onPress={async () => { setError(null); setGoogleLoading(true); await promptAsync({ useProxy: true }); }}
           disabled={!request || googleLoading || loading}
           activeOpacity={0.82}
         >

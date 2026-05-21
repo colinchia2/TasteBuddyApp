@@ -19,7 +19,7 @@ export default function WelcomeScreen({ navigation }) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState(null);
 
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'tastebuddy', preferLocalhost: true });
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
   console.log('[WelcomeScreen] Google OAuth redirectUri:', redirectUri);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -54,7 +54,7 @@ export default function WelcomeScreen({ navigation }) {
   async function startGoogle() {
     setGoogleError(null);
     setGoogleLoading(true);
-    await promptAsync();
+    await promptAsync({ useProxy: true });
   }
 
   return (

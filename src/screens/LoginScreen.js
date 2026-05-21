@@ -23,7 +23,7 @@ export default function LoginScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  const redirectUri = AuthSession.makeRedirectUri({ scheme: 'tastebuddy', preferLocalhost: true });
+  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
   console.log('[LoginScreen] Google OAuth redirectUri:', redirectUri);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -89,7 +89,7 @@ export default function LoginScreen({ navigation }) {
         {/* Google */}
         <TouchableOpacity
           style={styles.googleBtn}
-          onPress={async () => { setError(null); setGoogleLoading(true); await promptAsync(); }}
+          onPress={async () => { setError(null); setGoogleLoading(true); await promptAsync({ useProxy: true }); }}
           disabled={!request || googleLoading || loading}
           activeOpacity={0.82}
         >
