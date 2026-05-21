@@ -36,6 +36,7 @@ import EditVisitScreen from './src/screens/EditVisitScreen';
 import EditPlaceScreen from './src/screens/EditPlaceScreen';
 import PairwiseScreen from './src/screens/PairwiseScreen';
 import ResortScreen from './src/screens/ResortScreen';
+import EmailVerificationPendingScreen from './src/screens/EmailVerificationPendingScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -58,6 +59,8 @@ function RootNavigator() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="SignUp" component={SignUpScreen} />
         </>
+      ) : !user.email_confirmed ? (
+        <Stack.Screen name="EmailVerificationPending" component={EmailVerificationPendingScreen} />
       ) : !user.onboarding_complete ? (
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       ) : (

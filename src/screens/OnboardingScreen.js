@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, Alert, ScrollView,
@@ -16,11 +16,36 @@ export default function OnboardingScreen() {
   // step 0: city | step 1: categories | step 2: suggestions | step 3: done
 
   const [city, setCity] = useState('');
+  const [citySuggestions, setCitySuggestions] = useState([]);
+  const [cityLoading, setCityLoading] = useState(false);
+  const cityDebounce = useRef(null);
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [customCategory, setCustomCategory] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [tieredPlaces, setTieredPlaces] = useState({});
   const [loading, setLoading] = useState(false);
+
+  function onCityChange(text) {
+    setCity(text);
+    if (cityDebounce.current) clearTimeout(cityDebounce.current);
+    if (text.trim().length < 2) { setCitySuggestions([]); return; }
+    cityDebounce.current = setTimeout(async () => {
+      setCityLoading(true);
+      try {
+        const results = await api.json(`/api/places/city-autocomplete?q=${encodeURIComponent(text.trim())}`);
+        setCitySuggestions(results || []);
+      } catch {
+        setCitySuggestions([]);
+      } finally {
+        setCityLoading(false);
+      }
+    }, 350);
+  }
+
+  function selectCity(name) {
+    setCity(name);
+    setCitySuggestions([]);
+  }
 
   async function submitCity() {
     if (!city.trim()) { Alert.alert('Enter your city'); return; }
@@ -96,14 +121,34 @@ export default function OnboardingScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>Welcome to TasteBuddy!</Text>
         <Text style={styles.subtitle}>Let's set up your food list. What city are you in?</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. New York"
-          placeholderTextColor={COLORS.textLight}
-          value={city}
-          onChangeText={setCity}
-          onSubmitEditing={submitCity}
-        />
+        <View style={styles.cityWrapper}>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. New York"
+            placeholderTextColor={COLORS.textLight}
+            value={city}
+            onChangeText={onCityChange}
+            onSubmitEditing={submitCity}
+            autoCorrect={false}
+          />
+          {cityLoading && (
+            <ActivityIndicator size="small" color={COLORS.gold} style={styles.citySpinner} />
+          )}
+          {citySuggestions.length > 0 && (
+            <View style={styles.dropdown}>
+              {citySuggestions.map((item, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.dropdownItem, i < citySuggestions.length - 1 && styles.dropdownItemBorder]}
+                  onPress={() => selectCity(item.name)}
+                >
+                  <Text style={styles.dropdownName}>{item.name}</Text>
+                  <Text style={styles.dropdownDesc} numberOfLines={1}>{item.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
         <TouchableOpacity style={styles.btn} onPress={submitCity} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Continue</Text>}
         </TouchableOpacity>
@@ -204,6 +249,20 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
     fontSize: 15, color: COLORS.text, marginBottom: 12,
   },
+  cityWrapper: { position: 'relative', marginBottom: 12, zIndex: 10 },
+  citySpinner: { position: 'absolute', right: 14, top: 16 },
+  dropdown: {
+    position: 'absolute', top: '100%', left: 0, right: 0,
+    backgroundColor: COLORS.white, borderRadius: 12,
+    borderWidth: 0.5, borderColor: COLORS.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
+    zIndex: 20,
+  },
+  dropdownItem: { paddingHorizontal: 16, paddingVertical: 12 },
+  dropdownItemBorder: { borderBottomWidth: 0.5, borderBottomColor: COLORS.border },
+  dropdownName: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text },
+  dropdownDesc: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
   btn: {
     backgroundColor: COLORS.gold, borderRadius: 24, paddingVertical: 15,
     alignItems: 'center', marginTop: 8,

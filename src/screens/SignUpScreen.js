@@ -22,6 +22,8 @@ export default function SignUpScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: GOOGLE_WEB_CLIENT_ID,
@@ -146,27 +148,37 @@ export default function SignUpScreen({ navigation }) {
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="8+ characters, include a symbol"
-            placeholderTextColor={COLORS.textLight}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            returnKeyType="next"
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={[styles.input, styles.passwordInput]}
+              placeholder="8+ characters, include a symbol"
+              placeholderTextColor={COLORS.textLight}
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+              returnKeyType="next"
+            />
+            <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(v => !v)}>
+              <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+            </TouchableOpacity>
+          </View>
 
           <Text style={styles.label}>Confirm password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Same password again"
-            placeholderTextColor={COLORS.textLight}
-            secureTextEntry
-            value={confirm}
-            onChangeText={setConfirm}
-            onSubmitEditing={handleSignUp}
-            returnKeyType="done"
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={[styles.input, styles.passwordInput]}
+              placeholder="Same password again"
+              placeholderTextColor={COLORS.textLight}
+              secureTextEntry={!showConfirm}
+              value={confirm}
+              onChangeText={setConfirm}
+              onSubmitEditing={handleSignUp}
+              returnKeyType="done"
+            />
+            <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirm(v => !v)}>
+              <Text style={styles.eyeText}>{showConfirm ? 'Hide' : 'Show'}</Text>
+            </TouchableOpacity>
+          </View>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -225,6 +237,10 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
     fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text,
   },
+  passwordWrapper: { position: 'relative' },
+  passwordInput: { paddingRight: 60 },
+  eyeBtn: { position: 'absolute', right: 14, top: 0, bottom: 0, justifyContent: 'center' },
+  eyeText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.gold },
   errorText: {
     fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#E24B4A',
     marginTop: 12, lineHeight: 18,

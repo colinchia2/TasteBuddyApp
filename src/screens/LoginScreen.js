@@ -20,6 +20,7 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: GOOGLE_WEB_CLIENT_ID,
@@ -113,16 +114,21 @@ export default function LoginScreen({ navigation }) {
           onChangeText={setEmail}
           returnKeyType="next"
         />
-        <TextInput
-          style={[styles.input, { marginBottom: 0 }]}
-          placeholder="Password"
-          placeholderTextColor={COLORS.textLight}
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          onSubmitEditing={handleLogin}
-          returnKeyType="done"
-        />
+        <View style={styles.passwordWrapper}>
+          <TextInput
+            style={[styles.input, styles.passwordInput]}
+            placeholder="Password"
+            placeholderTextColor={COLORS.textLight}
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+            onSubmitEditing={handleLogin}
+            returnKeyType="done"
+          />
+          <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassword(v => !v)}>
+            <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+          </TouchableOpacity>
+        </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -170,6 +176,10 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
     fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text, marginBottom: 12,
   },
+  passwordWrapper: { position: 'relative', marginBottom: 0 },
+  passwordInput: { marginBottom: 0, paddingRight: 60 },
+  eyeBtn: { position: 'absolute', right: 14, top: 0, bottom: 0, justifyContent: 'center' },
+  eyeText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.gold },
   errorText: {
     fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#E24B4A',
     marginTop: 8, marginBottom: 4,
