@@ -16,6 +16,7 @@ export default function OnboardingScreen() {
   // step 0: city | step 1: categories | step 2: suggestions | step 3: done
 
   const [city, setCity] = useState('');
+  const [cityPlaceId, setCityPlaceId] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
   const [cityLoading, setCityLoading] = useState(false);
   const cityDebounce = useRef(null);
@@ -42,8 +43,9 @@ export default function OnboardingScreen() {
     }, 350);
   }
 
-  function selectCity(name) {
-    setCity(name);
+  function selectCity(item) {
+    setCity(item.name);
+    setCityPlaceId(item.place_id || '');
     setCitySuggestions([]);
   }
 
@@ -55,6 +57,7 @@ export default function OnboardingScreen() {
         method: 'POST',
         body: JSON.stringify({
           city: city.trim(),
+          city_place_id: cityPlaceId || undefined,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
@@ -150,7 +153,7 @@ export default function OnboardingScreen() {
                 <TouchableOpacity
                   key={i}
                   style={[styles.dropdownItem, i < citySuggestions.length - 1 && styles.dropdownItemBorder]}
-                  onPress={() => selectCity(item.name)}
+                  onPress={() => selectCity(item)}
                 >
                   <Text style={styles.dropdownName}>{item.name}</Text>
                   <Text style={styles.dropdownDesc} numberOfLines={1}>{item.description}</Text>
