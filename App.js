@@ -31,6 +31,10 @@ import OnboardingSTierScreen from './src/screens/onboarding/OnboardingSTierScree
 import OnboardingMilestoneScreen from './src/screens/onboarding/OnboardingMilestoneScreen';
 import OnboardingMoreCategoriesScreen from './src/screens/onboarding/OnboardingMoreCategoriesScreen';
 import OnboardingAskAIScreen from './src/screens/onboarding/OnboardingAskAIScreen';
+import OnboardingTransitionScreen from './src/screens/onboarding/OnboardingTransitionScreen';
+import OnboardingCategoryEducationScreen from './src/screens/onboarding/OnboardingCategoryEducationScreen';
+import OnboardingPaywallScreen from './src/screens/onboarding/OnboardingPaywallScreen';
+import OnboardingImportScreen from './src/screens/onboarding/OnboardingImportScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import CheckInScreen from './src/screens/CheckInScreen';
 import LogVisitScreen from './src/screens/LogVisitScreen';
@@ -70,13 +74,17 @@ function OnboardingNavigator({ step }) {
     >
       <OnboardingStack.Screen name="ValueProp" component={OnboardingValuePropScreen} />
       <OnboardingStack.Screen name="Profile" component={OnboardingProfileScreen} />
+      <OnboardingStack.Screen name="Transition" component={OnboardingTransitionScreen} />
       <OnboardingStack.Screen name="Dinner" component={OnboardingDinnerScreen} />
       <OnboardingStack.Screen name="Cuisine" component={OnboardingCuisineScreen} />
       <OnboardingStack.Screen name="Rank" component={OnboardingRankScreen} />
       <OnboardingStack.Screen name="STier" component={OnboardingSTierScreen} />
       <OnboardingStack.Screen name="Milestone" component={OnboardingMilestoneScreen} />
       <OnboardingStack.Screen name="MoreCategories" component={OnboardingMoreCategoriesScreen} />
+      <OnboardingStack.Screen name="CategoryEducation" component={OnboardingCategoryEducationScreen} />
       <OnboardingStack.Screen name="AskAI" component={OnboardingAskAIScreen} />
+      <OnboardingStack.Screen name="Paywall" component={OnboardingPaywallScreen} />
+      <OnboardingStack.Screen name="Import" component={OnboardingImportScreen} />
     </OnboardingStack.Navigator>
   );
 }

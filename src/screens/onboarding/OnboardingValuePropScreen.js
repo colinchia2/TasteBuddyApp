@@ -5,6 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../api/client';
 import { COLORS } from '../../constants/colors';
+import TBLogo from '../../components/TBLogo';
 
 export default function OnboardingValuePropScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
@@ -28,8 +29,7 @@ export default function OnboardingValuePropScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.top}>
-          <Text style={styles.logo}>TasteBuddy</Text>
-          <Text style={styles.emoji}>🍽️</Text>
+          <TBLogo size={72} style={styles.logoImg} />
           <Text style={styles.tagline}>Your buddy, with your tastes.</Text>
           <Text style={styles.sub}>Not what everyone likes. What you like.</Text>
         </View>
@@ -65,10 +65,7 @@ const styles = StyleSheet.create({
     flex: 1, paddingHorizontal: 32, justifyContent: 'space-between', paddingBottom: 40, paddingTop: 24,
   },
   top: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  logo: {
-    fontFamily: 'Outfit_800ExtraBold', fontSize: 22, color: COLORS.gold, marginBottom: 20,
-  },
-  emoji: { fontSize: 56, marginBottom: 20 },
+  logoImg: { marginBottom: 24 },
   tagline: {
     fontFamily: 'Outfit_800ExtraBold', fontSize: 26, color: COLORS.text,
     textAlign: 'center', marginBottom: 10,

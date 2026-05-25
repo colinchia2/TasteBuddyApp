@@ -106,6 +106,7 @@ export default function LogVisitScreen({ navigation, route }) {
   const paramCheckinId = route.params?.checkinId || null;
   const paramPrefillSearch = route.params?.prefillSearch || '';
   const paramFromActionCard = route.params?.fromActionCard || null;
+  const paramAfterSaveNav = route.params?.afterSaveNav || null;
 
   // Phase: 'choice' | 'search' | 'form'
   const [phase, setPhase] = useState(paramPlaceId ? 'form' : paramPrefillSearch ? 'search' : 'choice');
@@ -379,6 +380,8 @@ export default function LogVisitScreen({ navigation, route }) {
           newId: data.pairwise_data.new_id,
           category: data.pairwise_data.category,
         });
+      } else if (paramAfterSaveNav) {
+        navigation.replace(paramAfterSaveNav.screen, paramAfterSaveNav.params);
       } else if (paramFromActionCard) {
         navigation.navigate('Home', { actionCompleted: paramFromActionCard });
       } else {

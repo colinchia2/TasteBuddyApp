@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, Modal, Pressable,
+  ScrollView, ActivityIndicator, Alert, Modal, Pressable, Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../api/client';
 import { COLORS, TIER_COLORS } from '../../constants/colors';
 
-const RANK_TIERS = ['S', 'A', 'B', 'C', 'TBE'];
-const TIER_LABELS = { S: 'S Tier', A: 'A Tier', B: 'B Tier', C: 'C-Tier — Okay', TBE: 'TBE' };
+const TIER_BUCKETS = ['S', 'A', 'B', 'C', 'TBE'];
+
+const TIER_LABELS = { S: 'S Tier', A: 'A Tier', B: 'B Tier', C: 'C Tier', TBE: 'TBE' };
+const TIER_DESCRIPTIONS = {
+  S: 'The absolute best',
+  A: 'Love it — go regularly',
+  B: 'Like it — worth going',
+  C: "It's okay",
+  TBE: 'No strong opinion yet',
+};
 
 export default function OnboardingRankScreen({ navigation, route }) {
   const incomingPlaces = route.params?.places || [];
@@ -18,12 +26,12 @@ export default function OnboardingRankScreen({ navigation, route }) {
 
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(incomingPlaces.length === 0);
-  const [selected, setSelected] = useState(null); // place being tiered
+  const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (incomingPlaces.length > 0) {
-      setPlaces(incomingPlaces.map(p => ({ ...p, tier: 'TBE' })));
+      setPlaces(incomingPlaces.map(p => ({ ...p, tier: null })));
     } else {
       fetchPlaces();
     }
@@ -32,7 +40,7 @@ export default function OnboardingRankScreen({ navigation, route }) {
   async function fetchPlaces() {
     try {
       const data = await api.json(`/api/onboarding/my-places?category=${encodeURIComponent(category)}`);
-      setPlaces((data.places || []).map(p => ({ ...p, tier: p.tier || 'TBE' })));
+      setPlaces((data.places || []).map(p => ({ ...p, tier: null })));
     } catch {
       setPlaces([]);
     } finally {
@@ -41,6 +49,7 @@ export default function OnboardingRankScreen({ navigation, route }) {
   }
 
   function assignTier(userPlaceId, tier) {
+    Vibration.vibrate(40);
     setPlaces(prev => prev.map(p =>
       p.user_place_id === userPlaceId ? { ...p, tier } : p
     ));
@@ -54,7 +63,7 @@ export default function OnboardingRankScreen({ navigation, route }) {
         method: 'POST',
         body: JSON.stringify(places.map(p => ({
           user_place_id: p.user_place_id,
-          tier: p.tier,
+          tier: p.tier || 'TBE',
         }))),
       });
 
@@ -66,19 +75,15 @@ export default function OnboardingRankScreen({ navigation, route }) {
       }
 
       const sTierPlaces = places.filter(p => p.tier === 'S');
-      const tierCounts = RANK_TIERS.reduce((acc, t) => {
-        acc[t] = places.filter(p => p.tier === t).length;
+      const tierCounts = TIER_BUCKETS.reduce((acc, t) => {
+        acc[t] = places.filter(p => (p.tier || 'TBE') === t).length;
         return acc;
       }, {});
 
       if (sTierPlaces.length > 0) {
         navigation.navigate('STier', {
-          sTierPlaces,
-          city,
-          category,
-          isAdditional,
-          returnTo: route.params?.returnTo,
-          tierCounts,
+          sTierPlaces, city, category, isAdditional,
+          returnTo: route.params?.returnTo, tierCounts,
         });
       } else if (isAdditional) {
         const returnTo = route.params?.returnTo;
@@ -104,30 +109,57 @@ export default function OnboardingRankScreen({ navigation, route }) {
     );
   }
 
+  const unsorted = places.filter(p => !p.tier);
+  const sorted = places.filter(p => !!p.tier);
+  const allSorted = unsorted.length === 0;
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Drag each place into a tier</Text>
-          <Text style={styles.subtitle}>Tap a place to assign it.</Text>
+          <Text style={styles.title}>Rank your places</Text>
+          <Text style={styles.subtitle}>Tap any place to assign it to a tier.</Text>
         </View>
 
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-          {RANK_TIERS.map(tier => {
+          {/* Unsorted section */}
+          {unsorted.length > 0 && (
+            <View style={styles.unsortedSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.unsortedLabel}>UNSORTED</Text>
+                <Text style={styles.unsortedCount}>{unsorted.length} remaining</Text>
+              </View>
+              <View style={styles.unsortedGrid}>
+                {unsorted.map(p => (
+                  <TouchableOpacity
+                    key={p.user_place_id}
+                    style={styles.unsortedChip}
+                    onPress={() => setSelected(p)}
+                  >
+                    <Text style={styles.unsortedChipText} numberOfLines={1}>{p.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Tier buckets */}
+          {TIER_BUCKETS.map(tier => {
             const tc = TIER_COLORS[tier];
             const tierPlaces = places.filter(p => p.tier === tier);
             return (
               <View key={tier} style={[styles.bucket, { borderLeftColor: tc.text }]}>
                 <View style={[styles.bucketHeader, { backgroundColor: tc.bg }]}>
-                  <Text style={[styles.bucketLabel, { color: tc.text }]}>
-                    {TIER_LABELS[tier]}
-                  </Text>
-                  <Text style={[styles.bucketCount, { color: tc.text }]}>
-                    {tierPlaces.length > 0 ? tierPlaces.length : ''}
-                  </Text>
+                  <View>
+                    <Text style={[styles.bucketLabel, { color: tc.text }]}>{TIER_LABELS[tier]}</Text>
+                    <Text style={[styles.bucketDesc, { color: tc.text }]}>{TIER_DESCRIPTIONS[tier]}</Text>
+                  </View>
+                  {tierPlaces.length > 0 && (
+                    <Text style={[styles.bucketCount, { color: tc.text }]}>{tierPlaces.length}</Text>
+                  )}
                 </View>
                 {tierPlaces.length === 0 ? (
-                  <Text style={styles.emptyHint}>Tap a place below to assign here</Text>
+                  <Text style={styles.emptyHint}>None yet</Text>
                 ) : (
                   tierPlaces.map(p => (
                     <TouchableOpacity
@@ -143,14 +175,12 @@ export default function OnboardingRankScreen({ navigation, route }) {
             );
           })}
 
-          {/* Untiered bottom */}
-          {places.filter(p => false).length === 0 && (
-            <View style={{ height: 16 }} />
+          {!allSorted && (
+            <Text style={styles.hint}>Unsorted places will be saved as TBE</Text>
           )}
+
           <View style={{ height: 100 }} />
         </ScrollView>
-
-        {/* Unassigned list at very top if TBE has items */}
 
         <View style={styles.footer}>
           <TouchableOpacity style={styles.btn} onPress={handleContinue} disabled={saving}>
@@ -161,24 +191,46 @@ export default function OnboardingRankScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* Tier picker modal */}
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)}>
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle} numberOfLines={1}>{selected?.name}</Text>
-            <Text style={styles.modalSub}>Move to tier:</Text>
-            {RANK_TIERS.map(tier => {
+            <Text style={styles.modalSub}>Assign to tier:</Text>
+
+            {/* Unsorted option */}
+            <TouchableOpacity
+              style={[styles.tierOption, !selected?.tier && styles.tierOptionActive]}
+              onPress={() => assignTier(selected.user_place_id, null)}
+            >
+              <View>
+                <Text style={[styles.tierOptionText, !selected?.tier && styles.tierOptionTextActive]}>
+                  Unsorted
+                </Text>
+                <Text style={styles.tierOptionDesc}>Move back to unsorted</Text>
+              </View>
+              {!selected?.tier && <Text style={styles.tierCheck}>✓</Text>}
+            </TouchableOpacity>
+
+            {TIER_BUCKETS.map(tier => {
               const tc = TIER_COLORS[tier];
               const isActive = selected?.tier === tier;
               return (
                 <TouchableOpacity
                   key={tier}
-                  style={[styles.tierOption, { backgroundColor: isActive ? tc.bg : '#fff' }]}
+                  style={[
+                    styles.tierOption,
+                    isActive && { backgroundColor: tc.bg, borderColor: tc.text },
+                  ]}
                   onPress={() => assignTier(selected.user_place_id, tier)}
                 >
-                  <Text style={[styles.tierOptionText, { color: isActive ? tc.text : COLORS.text }]}>
-                    {TIER_LABELS[tier]}
-                  </Text>
+                  <View>
+                    <Text style={[styles.tierOptionText, { color: isActive ? tc.text : COLORS.text }]}>
+                      {TIER_LABELS[tier]}
+                    </Text>
+                    <Text style={[styles.tierOptionDesc, isActive && { color: tc.text }]}>
+                      {TIER_DESCRIPTIONS[tier]}
+                    </Text>
+                  </View>
                   {isActive && <Text style={{ color: tc.text, fontSize: 14 }}>✓</Text>}
                 </TouchableOpacity>
               );
@@ -198,15 +250,35 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Outfit_800ExtraBold', fontSize: 24, color: COLORS.text, marginBottom: 4 },
   subtitle: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.textMuted },
   scroll: { flex: 1, paddingHorizontal: 16 },
+  unsortedSection: {
+    marginTop: 16, marginBottom: 8,
+    backgroundColor: '#fff', borderRadius: 12,
+    borderWidth: 0.5, borderColor: COLORS.border, padding: 14,
+  },
+  sectionHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10,
+  },
+  unsortedLabel: {
+    fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted,
+    letterSpacing: 0.8, textTransform: 'uppercase',
+  },
+  unsortedCount: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted },
+  unsortedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  unsortedChip: {
+    backgroundColor: COLORS.offWhite, borderWidth: 0.5, borderColor: COLORS.border,
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, maxWidth: '60%',
+  },
+  unsortedChipText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.text },
   bucket: {
     borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border,
-    borderLeftWidth: 3, marginBottom: 10, overflow: 'hidden', backgroundColor: '#fff',
+    borderLeftWidth: 3, marginBottom: 8, overflow: 'hidden', backgroundColor: '#fff',
   },
   bucketHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 10,
   },
   bucketLabel: { fontFamily: 'DMSans_700Bold', fontSize: 13 },
+  bucketDesc: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 1, opacity: 0.8 },
   bucketCount: { fontFamily: 'DMSans_700Bold', fontSize: 13 },
   emptyHint: {
     fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textLight,
@@ -217,6 +289,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 8,
   },
   placeChipText: { fontFamily: 'DMSans_500Medium', fontSize: 13 },
+  hint: {
+    fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textLight,
+    textAlign: 'center', marginTop: 12, fontStyle: 'italic',
+  },
   footer: {
     paddingHorizontal: 24, paddingVertical: 16,
     borderTopWidth: 0.5, borderTopColor: COLORS.border, backgroundColor: COLORS.offWhite,
@@ -226,8 +302,7 @@ const styles = StyleSheet.create({
   },
   btnText: { fontFamily: 'DMSans_700Bold', fontSize: 16, color: '#fff' },
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
   },
   modalSheet: {
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
@@ -237,12 +312,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit_700Bold', fontSize: 18, color: COLORS.text, marginBottom: 4,
   },
   modalSub: {
-    fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted, marginBottom: 14,
+    fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted, marginBottom: 12,
   },
   tierOption: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderRadius: 10, paddingHorizontal: 16, paddingVertical: 13, marginBottom: 8,
-    borderWidth: 0.5, borderColor: COLORS.border,
+    borderRadius: 10, paddingHorizontal: 16, paddingVertical: 11, marginBottom: 6,
+    borderWidth: 0.5, borderColor: COLORS.border, backgroundColor: '#fff',
   },
-  tierOptionText: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  tierOptionActive: { backgroundColor: COLORS.borderLight, borderColor: COLORS.border },
+  tierOptionText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text },
+  tierOptionTextActive: { color: COLORS.textMuted },
+  tierOptionDesc: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  tierCheck: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.textMuted },
 });

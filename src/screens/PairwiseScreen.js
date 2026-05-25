@@ -12,7 +12,9 @@ export default function PairwiseScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [newPlace, setNewPlace] = useState(null);
   const [existing, setExisting] = useState([]);
-  const [vsIdx, setVsIdx] = useState(0);
+  const [lo, setLo] = useState(0);
+  const [hi, setHi] = useState(-1);
+  const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -24,6 +26,8 @@ export default function PairwiseScreen({ navigation, route }) {
       const data = await api.json(`/api/places/pairwise/s-tier?new_id=${newId}&category=${encodeURIComponent(category)}`);
       setNewPlace(data.new_place);
       setExisting(data.existing);
+      setLo(0);
+      setHi(data.existing.length - 1);
     } catch (e) {
       Alert.alert('Error', 'Could not load pairwise data.');
       navigation.goBack();
@@ -38,12 +42,14 @@ export default function PairwiseScreen({ navigation, route }) {
     try {
       const data = await api.json('/api/places/pairwise/pick', {
         method: 'POST',
-        body: JSON.stringify({ new_id: newId, vs_idx: vsIdx, winner, category }),
+        body: JSON.stringify({ new_id: newId, lo, hi, winner, category }),
       });
       if (data.done) {
         navigation.replace('Home');
       } else {
-        setVsIdx(data.next_vs_idx);
+        setLo(data.next_lo);
+        setHi(data.next_hi);
+        setStep(s => s + 1);
       }
     } catch (e) {
       Alert.alert('Error', 'Could not save pick.');
@@ -57,7 +63,7 @@ export default function PairwiseScreen({ navigation, route }) {
     try {
       await api.json('/api/places/pairwise/pick', {
         method: 'POST',
-        body: JSON.stringify({ new_id: newId, vs_idx: 9999, winner: 'existing', category }),
+        body: JSON.stringify({ new_id: newId, skip: true, winner: 'existing', category }),
       });
     } catch (_) {}
     navigation.replace('Home');
@@ -71,9 +77,11 @@ export default function PairwiseScreen({ navigation, route }) {
     );
   }
 
-  const vsPlace = existing[vsIdx];
+  const mid = Math.floor((lo + hi) / 2);
+  const vsPlace = existing[mid];
   const total = existing.length;
-  const progress = total > 0 ? vsIdx / total : 0;
+  const totalSteps = Math.max(1, Math.ceil(Math.log2(total + 1)));
+  const progress = Math.min(1, (step - 1) / totalSteps);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -92,7 +100,7 @@ export default function PairwiseScreen({ navigation, route }) {
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
           </View>
-          <Text style={styles.progressLabel}>{vsIdx + 1} of {total}</Text>
+          <Text style={styles.progressLabel}>{step} of ~{totalSteps}</Text>
         </View>
 
         {/* Cards */}
@@ -115,7 +123,7 @@ export default function PairwiseScreen({ navigation, route }) {
               disabled={saving}
               activeOpacity={0.75}
             >
-              <Text style={styles.cardTagExisting}>#{vsIdx + 1} CURRENTLY</Text>
+              <Text style={styles.cardTagExisting}>#{mid + 1} CURRENTLY</Text>
               <Text style={styles.cardName}>{vsPlace.name}</Text>
               {vsPlace.cuisine ? <Text style={styles.cardMeta}>{vsPlace.cuisine}</Text> : null}
             </TouchableOpacity>

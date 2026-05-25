@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api/client';
+import MarkdownMessage from '../../components/MarkdownMessage';
 import { COLORS } from '../../constants/colors';
 
 const FOLLOW_UP_PROMPTS = [
@@ -17,28 +18,29 @@ const FOLLOW_UP_PROMPTS = [
 export default function OnboardingAskAIScreen({ navigation, route }) {
   const city = route.params?.city || '';
   const { refreshUser } = useAuth();
-  const [response, setResponse] = useState('');
+
+  const [messages, setMessages] = useState([]); // [{role: 'user'|'ai', text}]
   const [questionsRemaining, setQuestionsRemaining] = useState(null);
   const [loading, setLoading] = useState(true);
   const [followUpText, setFollowUpText] = useState('');
   const [followUpLoading, setFollowUpLoading] = useState(false);
-  const [finishing, setFinishing] = useState(false);
   const conversationId = useRef(null);
   const scrollRef = useRef(null);
 
+  const initialQuestion = city
+    ? `Where should I eat dinner in ${city} tonight?`
+    : 'Where should I eat dinner tonight based on my rankings?';
+
   useEffect(() => {
-    sendInitialQuestion();
+    setMessages([{ role: 'user', text: initialQuestion }]);
+    sendQuestion(initialQuestion, true);
   }, []);
 
-  async function sendInitialQuestion() {
-    const question = city
-      ? `Where should I eat dinner in ${city} tonight?`
-      : 'Where should I eat dinner tonight based on my rankings?';
-    await sendQuestion(question, true);
-  }
-
   async function sendQuestion(message, isInitial = false) {
-    if (!isInitial) setFollowUpLoading(true);
+    if (!isInitial) {
+      setMessages(prev => [...prev, { role: 'user', text: message }]);
+      setFollowUpLoading(true);
+    }
     try {
       const data = await api.json('/api/ask/chat', {
         method: 'POST',
@@ -48,13 +50,13 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
         }),
       });
       conversationId.current = data.conversation_id;
-      setResponse(data.response || '');
+      const aiText = data.response || '';
+      setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
       if (data.questions_remaining !== undefined) {
         setQuestionsRemaining(data.questions_remaining);
       }
     } catch (e) {
       if (!isInitial) Alert.alert('Error', e.message);
-      setResponse('');
     } finally {
       setLoading(false);
       setFollowUpLoading(false);
@@ -63,16 +65,13 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
     }
   }
 
-  async function handleDone() {
-    setFinishing(true);
-    try {
-      await api.json('/api/onboarding/complete', { method: 'POST' });
-      await refreshUser();
-      // refreshUser updates onboarding_complete → RootNavigator switches to main app
-    } catch (e) {
-      Alert.alert('Error', e.message);
-      setFinishing(false);
-    }
+  function handleFollowUp(text) {
+    if (!text.trim() || followUpLoading) return;
+    sendQuestion(text.trim());
+  }
+
+  function handleDone() {
+    navigation.navigate('Paywall', { city });
   }
 
   return (
@@ -80,7 +79,7 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.logo}>TasteBuddy AI</Text>
-          <Text style={styles.headerSub}>Asking based on YOUR rankings</Text>
+          <Text style={styles.headerSub}>Personalized to YOUR rankings</Text>
         </View>
 
         <ScrollView
@@ -89,20 +88,37 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {loading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator color={COLORS.gold} size="large" />
-              <Text style={styles.loadingText}>Asking AI based on your taste profile…</Text>
+          {/* Chat messages */}
+          {messages.map((msg, i) => (
+            <View
+              key={i}
+              style={[
+                styles.bubble,
+                msg.role === 'user' ? styles.userBubble : styles.aiBubble,
+              ]}
+            >
+              {msg.role === 'ai' ? (
+                <MarkdownMessage text={msg.text} />
+              ) : (
+                <Text style={styles.userBubbleText}>{msg.text}</Text>
+              )}
             </View>
-          ) : (
-            <>
-              <View style={styles.aiCard}>
-                <Text style={styles.aiResponse}>{response}</Text>
-              </View>
+          ))}
 
+          {/* Typing indicator while initial or follow-up loads */}
+          {(loading || followUpLoading) && (
+            <View style={[styles.bubble, styles.aiBubble, styles.typingBubble]}>
+              <ActivityIndicator size="small" color={COLORS.gold} />
+              <Text style={styles.typingText}>Thinking…</Text>
+            </View>
+          )}
+
+          {/* Follow-up prompts — show after first AI response */}
+          {!loading && messages.some(m => m.role === 'ai') && (
+            <>
               <View style={styles.highlightBox}>
                 <Text style={styles.highlightText}>
-                  💚 That recommendation is personalized to your tier list — it filters out places you ranked lower and focuses on what you actually like.
+                  💚 That recommendation filters out places you ranked lower and focuses on what you actually like.
                 </Text>
               </View>
 
@@ -111,7 +127,7 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
                 <TouchableOpacity
                   key={i}
                   style={styles.promptChip}
-                  onPress={() => sendQuestion(prompt)}
+                  onPress={() => handleFollowUp(prompt)}
                   disabled={followUpLoading}
                 >
                   <Text style={styles.promptText}>"{prompt}"</Text>
@@ -126,11 +142,11 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
                   placeholder="Ask something else…"
                   placeholderTextColor={COLORS.textLight}
                   returnKeyType="send"
-                  onSubmitEditing={() => followUpText.trim() && sendQuestion(followUpText.trim())}
+                  onSubmitEditing={() => handleFollowUp(followUpText)}
                 />
                 <TouchableOpacity
                   style={[styles.sendBtn, !followUpText.trim() && styles.sendBtnDisabled]}
-                  onPress={() => followUpText.trim() && sendQuestion(followUpText.trim())}
+                  onPress={() => handleFollowUp(followUpText)}
                   disabled={!followUpText.trim() || followUpLoading}
                 >
                   {followUpLoading
@@ -151,10 +167,8 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
         </ScrollView>
 
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.btn} onPress={handleDone} disabled={finishing || loading}>
-            {finishing
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.btnText}>Go to TasteBoard →</Text>}
+          <TouchableOpacity style={styles.btn} onPress={handleDone} disabled={loading}>
+            <Text style={styles.btnText}>Go to TasteBoard →</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -172,20 +186,31 @@ const styles = StyleSheet.create({
   logo: { fontFamily: 'Outfit_800ExtraBold', fontSize: 18, color: COLORS.gold },
   headerSub: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 20 },
-  loadingBox: { alignItems: 'center', paddingVertical: 60 },
-  loadingText: {
-    fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.textMuted, marginTop: 14,
+  scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
+  bubble: {
+    borderRadius: 16, padding: 14, marginBottom: 10, maxWidth: '90%',
   },
-  aiCard: {
-    backgroundColor: '#fff', borderRadius: 14, borderWidth: 0.5, borderColor: COLORS.border,
-    padding: 18, marginBottom: 14,
+  userBubble: {
+    alignSelf: 'flex-end', backgroundColor: COLORS.gold,
+    borderBottomRightRadius: 4,
   },
-  aiResponse: {
-    fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text, lineHeight: 22,
+  userBubbleText: {
+    fontFamily: 'DMSans_500Medium', fontSize: 14, color: '#fff', lineHeight: 20,
+  },
+  aiBubble: {
+    alignSelf: 'flex-start', backgroundColor: '#fff',
+    borderWidth: 0.5, borderColor: COLORS.border,
+    borderBottomLeftRadius: 4, maxWidth: '95%',
+  },
+  typingBubble: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 12,
+  },
+  typingText: {
+    fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted,
   },
   highlightBox: {
-    backgroundColor: '#EAF3DE', borderRadius: 12, padding: 14, marginBottom: 20,
+    backgroundColor: '#EAF3DE', borderRadius: 12, padding: 14, marginBottom: 20, marginTop: 4,
   },
   highlightText: {
     fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#27500A', lineHeight: 19,

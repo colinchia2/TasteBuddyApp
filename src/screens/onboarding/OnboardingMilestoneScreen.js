@@ -88,7 +88,7 @@ export default function OnboardingMilestoneScreen({ navigation, route }) {
         body: JSON.stringify({ onboarding_step: 7 }),
       });
     } catch {}
-    navigation.navigate('MoreCategories', { city });
+    navigation.navigate('CategoryEducation', { city, tierCounts });
   }
 
   async function handleSkip() {

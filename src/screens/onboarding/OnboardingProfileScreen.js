@@ -9,6 +9,7 @@ import Constants from 'expo-constants';
 import { api } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { COLORS } from '../../constants/colors';
+import TBLogo from '../../components/TBLogo';
 
 export default function OnboardingProfileScreen({ navigation }) {
   const { user } = useAuth();
@@ -85,7 +86,7 @@ export default function OnboardingProfileScreen({ navigation }) {
         }),
       });
 
-      navigation.navigate('Dinner', { city: city.trim() });
+      navigation.navigate('Transition', { city: city.trim(), displayName: displayName.trim() });
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
@@ -100,7 +101,7 @@ export default function OnboardingProfileScreen({ navigation }) {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.logo}>TasteBuddy</Text>
+        <TBLogo size={40} style={styles.logoImg} />
         <Text style={styles.title}>Let's set you up</Text>
         <Text style={styles.subtitle}>Just a couple of things before we get into it.</Text>
 
@@ -186,7 +187,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.offWhite },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40 },
-  logo: { fontFamily: 'Outfit_800ExtraBold', fontSize: 18, color: COLORS.gold, marginBottom: 24 },
+  logoImg: { marginBottom: 24 },
   title: { fontFamily: 'Outfit_800ExtraBold', fontSize: 26, color: COLORS.text, marginBottom: 8 },
   subtitle: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.textMuted, marginBottom: 28 },
   label: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text, marginBottom: 8 },

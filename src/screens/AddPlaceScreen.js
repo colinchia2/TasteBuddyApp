@@ -168,7 +168,7 @@ export default function AddPlaceScreen({ navigation, route }) {
     }
     setSaving(true);
     try {
-      await api.json('/api/places/add-mobile', {
+      const data = await api.json('/api/places/add-mobile', {
         method: 'POST',
         body: JSON.stringify({
           google_place_id: selectedPlace.google_place_id,
@@ -176,15 +176,55 @@ export default function AddPlaceScreen({ navigation, route }) {
           address: selectedPlace.address,
           lat: selectedPlace.lat,
           lng: selectedPlace.lng,
-          tier,
-          category_id: selectedCategory?.id || null,
+          categories: [{ category_id: selectedCategory?.id || null, tier }],
           cuisine: cuisine.trim(),
         }),
       });
+
+      const isRankedTier = ['S', 'A', 'B', 'C'].includes(tier);
+
       if (fromActionCard) {
         navigation.navigate('Home', { actionCompleted: fromActionCard });
-      } else if (onDone) {
+        return;
+      }
+      if (onDone) {
         onDone();
+        return;
+      }
+
+      if (isRankedTier) {
+        const pairwiseParams = data.pairwise_data
+          ? { screen: 'Pairwise', params: { newId: data.pairwise_data.new_id, category: data.pairwise_data.category } }
+          : null;
+        Alert.alert(
+          'Place added!',
+          `Did you visit ${selectedPlace.name} recently?`,
+          [
+            {
+              text: 'Log a Visit',
+              onPress: () => navigation.replace('LogVisit', {
+                placeId: data.place_id,
+                placeName: selectedPlace.name,
+                afterSaveNav: pairwiseParams,
+              }),
+            },
+            {
+              text: 'Not now',
+              onPress: () => {
+                if (pairwiseParams) {
+                  navigation.replace(pairwiseParams.screen, pairwiseParams.params);
+                } else {
+                  navigation.goBack();
+                }
+              },
+            },
+          ]
+        );
+      } else if (data.pairwise_data) {
+        navigation.replace('Pairwise', {
+          newId: data.pairwise_data.new_id,
+          category: data.pairwise_data.category,
+        });
       } else {
         Alert.alert('Added!', `${selectedPlace.name} has been added to your list.`, [
           { text: 'OK', onPress: () => navigation.goBack() },

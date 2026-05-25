@@ -1,13 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, FlatList,
+  ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../api/client';
 import { COLORS } from '../../constants/colors';
 
 const MIN_PLACES = 10;
+
+const CARD_PALETTES = [
+  { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D' },
+  { bg: '#DCFCE7', text: '#166534', border: '#86EFAC' },
+  { bg: '#EDE9FE', text: '#5B21B6', border: '#C4B5FD' },
+  { bg: '#FFE4E6', text: '#9F1239', border: '#FCA5A5' },
+  { bg: '#DBEAFE', text: '#1E40AF', border: '#93C5FD' },
+  { bg: '#FEF9C3', text: '#854D0E', border: '#FDE68A' },
+  { bg: '#F0FDF4', text: '#14532D', border: '#6EE7B7' },
+  { bg: '#FDF4FF', text: '#7E22CE', border: '#E9D5FF' },
+];
+
+const MORE_COPIES = ['↻ More suggestions', 'Different spots', 'Try others', 'Show more'];
+
+function nameHash(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return Math.abs(h) % CARD_PALETTES.length;
+}
 
 export default function OnboardingDinnerScreen({ navigation, route }) {
   const city = route.params?.city || '';
@@ -20,16 +39,48 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
   const [searching, setSearching] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [places, setPlaces] = useState([]); // [{user_place_id, place_id, name}]
-  const [addingId, setAddingId] = useState(null);
+  const [places, setPlaces] = useState([]);
+  const [addingSet, setAddingSet] = useState(new Set());
   const [saving, setSaving] = useState(false);
+  const [moreCopyIdx, setMoreCopyIdx] = useState(0);
+
   const searchDebounce = useRef(null);
+  const nextBatchRef = useRef(null);
+  const fetchingBufferRef = useRef(false);
 
   useEffect(() => {
     loadSuggestions([]);
   }, []);
 
-  async function loadSuggestions(addedNames) {
+  async function prefetchNextBatch(currentNames) {
+    if (fetchingBufferRef.current) return;
+    fetchingBufferRef.current = true;
+    try {
+      const endpoint = currentNames.length >= 3
+        ? '/api/onboarding/adaptive-suggestions'
+        : '/api/onboarding/suggestions';
+      const body = currentNames.length >= 3
+        ? JSON.stringify({ added: currentNames, city })
+        : JSON.stringify({ categories: [category] });
+      const data = await api.json(endpoint, { method: 'POST', body });
+      const raw = data.suggestions || [];
+      nextBatchRef.current = raw.map(s => (typeof s === 'string' ? s : s.name));
+    } catch {
+      nextBatchRef.current = [];
+    } finally {
+      fetchingBufferRef.current = false;
+    }
+  }
+
+  async function loadSuggestions(addedNames, useBuffer = false) {
+    if (useBuffer && nextBatchRef.current !== null && nextBatchRef.current.length > 0) {
+      const buffered = nextBatchRef.current.filter(n => !addedNames.includes(n)).slice(0, 8);
+      nextBatchRef.current = null;
+      setSuggestions(buffered);
+      prefetchNextBatch(addedNames);
+      return;
+    }
+
     setSuggestionsLoading(true);
     try {
       const endpoint = addedNames.length >= 3
@@ -40,15 +91,20 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
         : JSON.stringify({ categories: [category] });
       const data = await api.json(endpoint, { method: 'POST', body });
       const raw = data.suggestions || [];
-      // Suggestions shape differs: adaptive returns [name], POST returns [{name, category}]
       const names = raw.map(s => (typeof s === 'string' ? s : s.name));
-      const filtered = names.filter(n => !places.find(p => p.name === n));
-      setSuggestions(filtered.slice(0, 8));
+      setSuggestions(names.filter(n => !addedNames.includes(n)).slice(0, 8));
+      nextBatchRef.current = null;
+      prefetchNextBatch(addedNames);
     } catch {
       setSuggestions([]);
     } finally {
       setSuggestionsLoading(false);
     }
+  }
+
+  function handleMorePress() {
+    setMoreCopyIdx(i => (i + 1) % MORE_COPIES.length);
+    loadSuggestions(places.map(p => p.name), true);
   }
 
   function onSearchChange(text) {
@@ -73,16 +129,13 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
   async function addPlace(name, googlePlaceId) {
     if (places.find(p => p.name === name)) return;
     const key = googlePlaceId || name;
-    setAddingId(key);
+
+    setAddingSet(prev => new Set([...prev, key]));
+
     try {
       const result = await api.json('/api/onboarding/add-place', {
         method: 'POST',
-        body: JSON.stringify({
-          name,
-          google_place_id: googlePlaceId || null,
-          category,
-          tier: 'TBE',
-        }),
+        body: JSON.stringify({ name, google_place_id: googlePlaceId || null, category, tier: 'TBE' }),
       });
       const newPlace = { user_place_id: result.user_place_id, place_id: result.place_id, name };
       const newPlaces = [...places, newPlace];
@@ -91,13 +144,14 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
       setSearchResults([]);
       setSuggestions(prev => prev.filter(s => s !== name));
       if (newPlaces.length >= 3 && newPlaces.length % 3 === 0) {
-        loadSuggestions(newPlaces.map(p => p.name));
+        loadSuggestions(newPlaces.map(p => p.name), true);
       }
     } catch (e) {
       Alert.alert('Error', e.message);
-    } finally {
-      setAddingId(null);
+      setAddingSet(prev => { const next = new Set(prev); next.delete(key); return next; });
+      return;
     }
+    setAddingSet(prev => { const next = new Set(prev); next.delete(key); return next; });
   }
 
   async function removePlace(userPlaceId) {
@@ -117,11 +171,7 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
         body: JSON.stringify({ onboarding_step: isAdditional ? undefined : 3 }),
       });
       navigation.navigate('Cuisine', {
-        places,
-        city,
-        category,
-        isAdditional,
-        returnTo: route.params?.returnTo,
+        places, city, category, isAdditional, returnTo: route.params?.returnTo,
       });
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -146,7 +196,6 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
           </Text>
         </View>
 
-        {/* Search */}
         <View style={styles.searchWrap}>
           <TextInput
             style={styles.searchInput}
@@ -158,7 +207,6 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
           {searching && <ActivityIndicator size="small" color={COLORS.gold} style={styles.searchSpinner} />}
         </View>
 
-        {/* Search results dropdown */}
         {searchResults.length > 0 && (
           <View style={styles.searchDropdown}>
             {searchResults.slice(0, 5).map((item, i) => (
@@ -166,7 +214,7 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
                 key={i}
                 style={[styles.searchItem, i < Math.min(searchResults.length, 5) - 1 && styles.searchItemBorder]}
                 onPress={() => addPlace(item.name || item.description, item.place_id)}
-                disabled={!!addingId}
+                disabled={addingSet.size > 0}
               >
                 <Text style={styles.searchItemName} numberOfLines={1}>{item.name || item.description}</Text>
                 {item.address ? (
@@ -178,33 +226,57 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
         )}
 
         <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          {/* Suggestions */}
-          {suggestions.length > 0 && (
+          {(suggestions.length > 0 || suggestionsLoading) && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionLabel}>SUGGESTIONS</Text>
-                <TouchableOpacity onPress={() => loadSuggestions(places.map(p => p.name))} disabled={suggestionsLoading}>
-                  <Text style={styles.refreshBtn}>{suggestionsLoading ? '...' : '↻ More'}</Text>
+                <TouchableOpacity onPress={handleMorePress} disabled={suggestionsLoading}>
+                  <Text style={styles.refreshBtn}>
+                    {suggestionsLoading ? '...' : MORE_COPIES[moreCopyIdx]}
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.pillRow}>
-                {suggestions.map((name, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    style={styles.suggPill}
-                    onPress={() => addPlace(name, null)}
-                    disabled={!!addingId}
-                  >
-                    {addingId === name
-                      ? <ActivityIndicator size="small" color={COLORS.gold} />
-                      : <Text style={styles.suggPillText}>{name}</Text>}
-                  </TouchableOpacity>
-                ))}
-              </View>
+
+              {suggestionsLoading ? (
+                <View style={styles.cardGrid}>
+                  {[...Array(4)].map((_, i) => (
+                    <View key={i} style={[styles.suggCard, styles.suggCardSkeleton]} />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.cardGrid}>
+                  {suggestions.map(name => {
+                    const palette = CARD_PALETTES[nameHash(name)];
+                    const key = name;
+                    const isAdding = addingSet.has(key);
+                    return (
+                      <TouchableOpacity
+                        key={name}
+                        style={[
+                          styles.suggCard,
+                          { backgroundColor: palette.bg, borderColor: isAdding ? COLORS.gold : palette.border },
+                          isAdding && styles.suggCardAdding,
+                        ]}
+                        onPress={() => addPlace(name, null)}
+                        disabled={isAdding}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[styles.suggCardText, { color: palette.text }]} numberOfLines={2}>
+                          {name}
+                        </Text>
+                        <View style={styles.suggCardAction}>
+                          {isAdding
+                            ? <ActivityIndicator size="small" color={COLORS.gold} />
+                            : <Text style={[styles.suggCardPlus, { color: palette.text }]}>+</Text>}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           )}
 
-          {/* Added places */}
           {places.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -228,9 +300,7 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
           )}
 
           {!isAdditional && places.length < minPlaces && (
-            <Text style={styles.hint}>
-              {minPlaces - places.length} more to go
-            </Text>
+            <Text style={styles.hint}>{minPlaces - places.length} more to go</Text>
           )}
 
           <View style={{ height: 100 }} />
@@ -269,7 +339,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 12,
     borderWidth: 0.5, borderColor: COLORS.border, marginBottom: 8,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 10,
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
   },
   searchItem: { paddingHorizontal: 16, paddingVertical: 13 },
   searchItemBorder: { borderBottomWidth: 0.5, borderBottomColor: COLORS.border },
@@ -278,22 +348,27 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, paddingHorizontal: 16 },
   section: { marginTop: 20 },
   sectionHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12,
   },
   sectionLabel: {
     fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted,
     letterSpacing: 0.8, textTransform: 'uppercase',
   },
   refreshBtn: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.gold },
+  cardGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  suggCard: {
+    width: '48%', borderRadius: 12, borderWidth: 1.5,
+    padding: 12, minHeight: 76,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  suggCardSkeleton: { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' },
+  suggCardAdding: { opacity: 0.65 },
+  suggCardText: { fontFamily: 'DMSans_700Bold', fontSize: 13, flex: 1, marginRight: 6, lineHeight: 18 },
+  suggCardAction: { width: 22, alignItems: 'center' },
+  suggCardPlus: { fontFamily: 'DMSans_700Bold', fontSize: 20 },
   counter: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted },
   counterDone: { fontFamily: 'DMSans_700Bold', color: '#27500A' },
   counterPending: { fontFamily: 'DMSans_700Bold', color: COLORS.text },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  suggPill: {
-    backgroundColor: '#fff', borderWidth: 0.5, borderColor: COLORS.border,
-    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
-  },
-  suggPillText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.text },
   placeRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#fff', borderRadius: 10, borderWidth: 0.5, borderColor: COLORS.border,
