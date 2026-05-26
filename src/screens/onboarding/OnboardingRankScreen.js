@@ -15,7 +15,7 @@ const TIER_DESCRIPTIONS = {
   A: 'Love it — go regularly',
   B: 'Like it — worth going',
   C: "It's okay",
-  TBE: 'No strong opinion yet',
+  TBE: "Haven't been yet — but I want to go! (To Be Eaten)",
 };
 
 export default function OnboardingRankScreen({ navigation, route }) {

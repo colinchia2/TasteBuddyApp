@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert,
@@ -14,17 +14,27 @@ export default function OnboardingSTierScreen({ navigation, route }) {
   const isAdditional = route.params?.isAdditional || false;
   const tierCounts = route.params?.tierCounts || {};
 
-  const [places, setPlaces] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [places, setPlaces] = useState(
+    incomingSTierPlaces.length > 0
+      ? incomingSTierPlaces.map((p, i) => ({ ...p, position: i + 1 }))
+      : []
+  );
+  const [loading, setLoading] = useState(incomingSTierPlaces.length === 0);
   const [saving, setSaving] = useState(false);
+  const skipFired = useRef(false);
 
   useEffect(() => {
-    if (incomingSTierPlaces.length > 0) {
-      setPlaces(incomingSTierPlaces.map((p, i) => ({ ...p, position: i + 1 })));
-    } else {
+    if (incomingSTierPlaces.length === 0) {
       fetchSTierPlaces();
     }
   }, []);
+
+  useEffect(() => {
+    if (!loading && places.length === 0 && !skipFired.current) {
+      skipFired.current = true;
+      handleContinue();
+    }
+  }, [loading, places.length]);
 
   async function fetchSTierPlaces() {
     setLoading(true);
@@ -98,9 +108,7 @@ export default function OnboardingSTierScreen({ navigation, route }) {
     );
   }
 
-  // Skip screen if no S-tier places
   if (!loading && places.length === 0) {
-    handleContinue();
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>

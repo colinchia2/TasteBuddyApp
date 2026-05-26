@@ -9,24 +9,9 @@ import { COLORS } from '../../constants/colors';
 
 const MIN_PLACES = 10;
 
-const CARD_PALETTES = [
-  { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D' },
-  { bg: '#DCFCE7', text: '#166534', border: '#86EFAC' },
-  { bg: '#EDE9FE', text: '#5B21B6', border: '#C4B5FD' },
-  { bg: '#FFE4E6', text: '#9F1239', border: '#FCA5A5' },
-  { bg: '#DBEAFE', text: '#1E40AF', border: '#93C5FD' },
-  { bg: '#FEF9C3', text: '#854D0E', border: '#FDE68A' },
-  { bg: '#F0FDF4', text: '#14532D', border: '#6EE7B7' },
-  { bg: '#FDF4FF', text: '#7E22CE', border: '#E9D5FF' },
-];
+const NEUTRAL_CARD = { bg: '#F5F3F0', text: '#555555', border: '#E0DDD8' };
 
 const MORE_COPIES = ['↻ More suggestions', 'Different spots', 'Try others', 'Show more'];
-
-function nameHash(name) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-  return Math.abs(h) % CARD_PALETTES.length;
-}
 
 export default function OnboardingDinnerScreen({ navigation, route }) {
   const city = route.params?.city || '';
@@ -246,28 +231,26 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
               ) : (
                 <View style={styles.cardGrid}>
                   {suggestions.map(name => {
-                    const palette = CARD_PALETTES[nameHash(name)];
-                    const key = name;
-                    const isAdding = addingSet.has(key);
+                    const isAdding = addingSet.has(name);
                     return (
                       <TouchableOpacity
                         key={name}
                         style={[
                           styles.suggCard,
-                          { backgroundColor: palette.bg, borderColor: isAdding ? COLORS.gold : palette.border },
+                          { backgroundColor: NEUTRAL_CARD.bg, borderColor: isAdding ? COLORS.gold : NEUTRAL_CARD.border },
                           isAdding && styles.suggCardAdding,
                         ]}
                         onPress={() => addPlace(name, null)}
                         disabled={isAdding}
                         activeOpacity={0.75}
                       >
-                        <Text style={[styles.suggCardText, { color: palette.text }]} numberOfLines={2}>
+                        <Text style={[styles.suggCardText, { color: NEUTRAL_CARD.text }]} numberOfLines={2}>
                           {name}
                         </Text>
                         <View style={styles.suggCardAction}>
                           {isAdding
                             ? <ActivityIndicator size="small" color={COLORS.gold} />
-                            : <Text style={[styles.suggCardPlus, { color: palette.text }]}>+</Text>}
+                            : <Text style={[styles.suggCardPlus, { color: NEUTRAL_CARD.text }]}>+</Text>}
                         </View>
                       </TouchableOpacity>
                     );
