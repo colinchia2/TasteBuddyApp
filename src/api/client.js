@@ -28,7 +28,16 @@ async function apiFetch(path, options = {}, retried = false) {
     ...(options.headers || {}),
   };
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  const controller = new AbortController();
+  const timeoutMs = path.includes('/api/ask/') ? 90000 : 30000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, { ...options, headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (res.status === 401 && !retried) {
     try {
