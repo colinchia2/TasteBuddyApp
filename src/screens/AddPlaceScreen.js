@@ -33,6 +33,10 @@ export default function AddPlaceScreen({ navigation, route }) {
   const [showCuisineDrop, setShowCuisineDrop] = useState(false);
   const [tier, setTier] = useState('TBE');
   const [saving, setSaving] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualAddress, setManualAddress] = useState('');
+  const [manualNeighborhood, setManualNeighborhood] = useState('');
   const [userLocation, setUserLocation] = useState(null);
   const searchInputRef = useRef(null);
   const searchTimer = useRef(null);
@@ -143,6 +147,27 @@ export default function AddPlaceScreen({ navigation, route }) {
     setStep(2);
   }
 
+  function openManual() {
+    setManualName(prev => (prev && prev.trim()) ? prev : query.trim());
+    setManualMode(true);
+  }
+
+  function continueManual() {
+    const name = manualName.trim();
+    if (!name) { Alert.alert('Name required', 'Please enter a place name.'); return; }
+    // Manual place: no Google place_id — saved with NULL gpid server-side.
+    setSelectedPlace({
+      google_place_id: null,
+      name,
+      address: manualAddress.trim(),
+      neighborhood: manualNeighborhood.trim(),
+      lat: null,
+      lng: null,
+      manual: true,
+    });
+    setStep(2);
+  }
+
   async function createNewCategory() {
     const name = newCategoryName.trim();
     if (!name) return;
@@ -174,6 +199,7 @@ export default function AddPlaceScreen({ navigation, route }) {
           google_place_id: selectedPlace.google_place_id,
           name: selectedPlace.name,
           address: selectedPlace.address,
+          neighborhood: selectedPlace.neighborhood || null,
           lat: selectedPlace.lat,
           lng: selectedPlace.lng,
           categories: [{ category_id: selectedCategory?.id || null, tier }],
@@ -262,17 +288,63 @@ export default function AddPlaceScreen({ navigation, route }) {
               />
               {searching && <ActivityIndicator size="small" color={COLORS.gold} style={{ marginLeft: 8 }} />}
             </View>
-            <FlatList
-              data={results}
-              keyExtractor={(item, i) => item.google_place_id || String(i)}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.resultRow} onPress={() => pickPlace(item)}>
-                  <Text style={styles.resultName}>{item.name}</Text>
-                  <Text style={styles.resultAddr}>{item.address || item.vicinity || ''}</Text>
+            {manualMode ? (
+              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
+                <Text style={styles.sectionLabel}>Place name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Restaurant name"
+                  placeholderTextColor={COLORS.textLight}
+                  value={manualName}
+                  onChangeText={setManualName}
+                  autoCorrect={false}
+                />
+                <Text style={styles.sectionLabel}>Address</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Street address"
+                  placeholderTextColor={COLORS.textLight}
+                  value={manualAddress}
+                  onChangeText={setManualAddress}
+                  autoCorrect={false}
+                />
+                <Text style={styles.sectionLabel}>Neighborhood / City <Text style={styles.optional}>(optional)</Text></Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Williamsburg, Brooklyn"
+                  placeholderTextColor={COLORS.textLight}
+                  value={manualNeighborhood}
+                  onChangeText={setManualNeighborhood}
+                  autoCorrect={false}
+                />
+                <Text style={styles.manualHint}>
+                  We'll save this place without Google data — you can rank and log it like any other.
+                </Text>
+                <TouchableOpacity style={styles.saveBtn} onPress={continueManual}>
+                  <Text style={styles.saveBtnText}>Continue</Text>
                 </TouchableOpacity>
-              )}
-              keyboardShouldPersistTaps="handled"
-            />
+                <TouchableOpacity style={styles.manualBack} onPress={() => setManualMode(false)}>
+                  <Text style={styles.showMoreText}>Back to search</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <FlatList
+                data={results}
+                keyExtractor={(item, i) => item.google_place_id || String(i)}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.resultRow} onPress={() => pickPlace(item)}>
+                    <Text style={styles.resultName}>{item.name}</Text>
+                    <Text style={styles.resultAddr}>{item.address || item.vicinity || ''}</Text>
+                  </TouchableOpacity>
+                )}
+                keyboardShouldPersistTaps="handled"
+                ListFooterComponent={
+                  <TouchableOpacity style={styles.manualToggle} onPress={openManual}>
+                    <Text style={styles.manualToggleText}>Can't find it? Add it manually</Text>
+                  </TouchableOpacity>
+                }
+              />
+            )}
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -467,4 +539,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginTop: 32, marginBottom: 40,
   },
   saveBtnText: { color: '#fff', fontFamily: 'Outfit_700Bold', fontSize: 16 },
+  optional: { color: COLORS.textMuted, textTransform: 'none', fontFamily: 'DMSans_400Regular' },
+  manualToggle: { paddingVertical: 14, alignItems: 'center' },
+  manualToggleText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.gold },
+  manualHint: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 10 },
+  manualBack: { alignItems: 'center', marginTop: 12 },
 });

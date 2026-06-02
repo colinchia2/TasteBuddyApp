@@ -800,10 +800,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderWidth: 0.5, borderColor: COLORS.border,
   },
   calChip: { flexDirection: 'row', alignItems: 'center' },
-  chipActive: { backgroundColor: COLORS.goldLight, borderColor: COLORS.gold },
+  chipActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
   chipDanger: { backgroundColor: COLORS.dangerLight, borderColor: COLORS.danger },
   chipText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.textMuted },
-  chipTextActive: { color: COLORS.gold, fontFamily: 'DMSans_700Bold' },
+  chipTextActive: { color: COLORS.white, fontFamily: 'DMSans_700Bold' },
   chipTextDanger: { color: COLORS.danger, fontFamily: 'DMSans_700Bold' },
 
   // Date input
