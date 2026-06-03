@@ -66,7 +66,17 @@ export const api = {
     } catch {
       throw new Error(`Server error (${res.status})`);
     }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      // Preserve structured fields (e.g. need_city, need_location_confirm) so
+      // callers can react, not just read err.message.
+      const err = new Error(data.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      err.need_city = !!data.need_city;
+      err.need_location_confirm = !!data.need_location_confirm;
+      err.location = data.location || null;
+      throw err;
+    }
     return data;
   },
 
@@ -89,7 +99,17 @@ export const api = {
     } catch {
       throw new Error(`Server error (${res.status})`);
     }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      // Preserve structured fields (e.g. need_city, need_location_confirm) so
+      // callers can react, not just read err.message.
+      const err = new Error(data.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      err.need_city = !!data.need_city;
+      err.need_location_confirm = !!data.need_location_confirm;
+      err.location = data.location || null;
+      throw err;
+    }
     return data;
   },
 };

@@ -12,6 +12,121 @@ import { COLORS, TIER_COLORS } from '../constants/colors';
 const TIERS = ['S', 'A', 'B', 'C', 'NEXT_UP', 'TBE'];
 const PRIMARY_NAMES = new Set(['Breakfast', 'Lunch', 'Dinner']);
 
+// ── Geo type-ahead helpers (mirror of web tbGeoField) ───────────────────────
+function geoNorm(s) {
+  return (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '').replace(/city$/, '');
+}
+function geoLev(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  const prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let diag = prev[0]; prev[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[n];
+}
+function geoClose(a, b) {
+  const na = geoNorm(a), nb = geoNorm(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;                     // "New York City" ≈ "New York"
+  const d = geoLev(na, nb);
+  return d <= 2 && d / Math.max(na.length, nb.length) <= 0.34;
+}
+function geoCitySource(q) {
+  return api.json('/api/places/geo-existing?type=city&q=' + encodeURIComponent(q || ''))
+    .then(rows => (rows || []).map(r => ({ name: r.name, sub: r.state_name || r.country || '', data: r })))
+    .catch(() => []);
+}
+function geoNbhdSource(q) {
+  return api.json('/api/places/geo-existing?type=neighborhood&q=' + encodeURIComponent(q || ''))
+    .then(rows => (rows || []).map(r => ({ name: r.name })))
+    .catch(() => []);
+}
+
+// Type-ahead-with-select. Selecting an existing value is the PRIMARY action (reuses
+// the exact record — "New York" → city 39, no dup); "+ Add" is the EXPLICIT
+// secondary action; a close match shows a "Did you mean…?" warning. Reuses the
+// cuisine-dropdown styling for consistency.
+function GeoField({ value, onChange, placeholder, allowNew = true, dupWarn = false, noun = 'value',
+                    fetchOptions, staticOptions, onPickItem, danger = false }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const tokenRef = useRef(0);
+  useEffect(() => {
+    if (!open) return;
+    if (staticOptions) {
+      const ql = (value || '').toLowerCase();
+      setItems(staticOptions.filter(o => (o.name || '').toLowerCase().includes(ql)).slice(0, 8));
+      return;
+    }
+    if (!fetchOptions) return;
+    const my = ++tokenRef.current;
+    const t = setTimeout(() => {
+      fetchOptions(value || '').then(rows => { if (my === tokenRef.current) setItems(rows || []); });
+    }, 180);
+    return () => clearTimeout(t);
+  }, [value, open, staticOptions]);
+
+  const ql = (value || '').toLowerCase();
+  const exact = items.some(i => (i.name || '').toLowerCase() === ql);
+  const near = (dupWarn && value && !exact)
+    ? items.find(i => (i.name || '').toLowerCase() !== ql && geoClose(i.name, value)) : null;
+
+  const pick = (item) => { onChange(item.name); if (onPickItem) onPickItem(item); setOpen(false); };
+  const addNew = () => { if (onPickItem) onPickItem({ name: value, isNew: true }); setOpen(false); };
+
+  return (
+    <View>
+      <View style={styles.cuisineInputRow}>
+        <TextInput
+          style={[styles.input, { marginBottom: 0, flex: 1 }, danger && { borderColor: COLORS.danger }]}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.textLight}
+          value={value}
+          onChangeText={(t) => { onChange(t); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 200)}
+          autoCorrect={false}
+          autoCapitalize="words"
+          returnKeyType="done"
+        />
+        {value ? (
+          <TouchableOpacity onPress={() => onChange('')} style={styles.clearBtn}>
+            <Ionicons name="close-circle" size={18} color={COLORS.textLight} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {open && (items.length > 0 || (allowNew && !!value && !exact)) && (
+        <View style={styles.dropdown}>
+          {items.map((i, idx) => (
+            <TouchableOpacity key={(i.name || '') + idx} style={styles.dropItem} onPress={() => pick(i)}>
+              <Text style={styles.dropItemText}>
+                {i.name}{i.sub ? <Text style={{ color: COLORS.textLight, fontSize: 11 }}>{'  '}{i.sub}</Text> : null}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {allowNew && !!value && !exact && (
+            <TouchableOpacity style={styles.dropItem} onPress={addNew}>
+              <Text style={[styles.dropItemText, { color: COLORS.gold, fontWeight: '600' }]}>+ Add “{value}”</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {near ? (
+        <Text style={{ fontSize: 12, color: COLORS.danger, marginTop: 4 }}>
+          Did you mean {near.name}? Adding “{value}” creates a new {noun}.{' '}
+          <Text style={{ color: COLORS.gold, fontWeight: '600' }} onPress={() => pick(near)}>Use {near.name}</Text>
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export default function AddPlaceScreen({ navigation, route }) {
   const prefillName = route?.params?.placeName || '';
   const prefillGoogleId = route?.params?.googlePlaceId || '';
@@ -29,6 +144,14 @@ export default function AddPlaceScreen({ navigation, route }) {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [cuisine, setCuisine] = useState('');
   const [cuisineSuggestions, setCuisineSuggestions] = useState([]);
+  // Location-confirm fallback (shown only when the server flags it uncertain)
+  const [needConfirm, setNeedConfirm] = useState(false);
+  const [confirmCity, setConfirmCity] = useState('');
+  const [confirmCountry, setConfirmCountry] = useState('');
+  const [confirmState, setConfirmState] = useState('');
+  const [confirmNeighborhood, setConfirmNeighborhood] = useState('');
+  const [confirmCountries, setConfirmCountries] = useState([]);
+  const [confirmStates, setConfirmStates] = useState([]);
   const [allCuisines, setAllCuisines] = useState([]);
   const [showCuisineDrop, setShowCuisineDrop] = useState(false);
   const [tier, setTier] = useState('TBE');
@@ -36,6 +159,7 @@ export default function AddPlaceScreen({ navigation, route }) {
   const [manualMode, setManualMode] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualAddress, setManualAddress] = useState('');
+  const [manualCity, setManualCity] = useState('');
   const [manualNeighborhood, setManualNeighborhood] = useState('');
   const [userLocation, setUserLocation] = useState(null);
   const searchInputRef = useRef(null);
@@ -155,6 +279,10 @@ export default function AddPlaceScreen({ navigation, route }) {
   function continueManual() {
     const name = manualName.trim();
     if (!name) { Alert.alert('Name required', 'Please enter a place name.'); return; }
+    // City required for manual entry — resolves the location in ONE pass so the
+    // confirm panel never re-asks in step 2.
+    const city = manualCity.trim();
+    if (!city) { Alert.alert('City required', 'Please enter the city.'); return; }
     // Manual place: no Google place_id — saved with NULL gpid server-side.
     setSelectedPlace({
       google_place_id: null,
@@ -164,6 +292,7 @@ export default function AddPlaceScreen({ navigation, route }) {
       lat: null,
       lng: null,
       manual: true,
+      manualCity: city,
     });
     setStep(2);
   }
@@ -191,20 +320,41 @@ export default function AddPlaceScreen({ navigation, route }) {
       Alert.alert('Cuisine required', 'Please enter a cuisine before saving.');
       return;
     }
+    // Once the confirm step is showing, City is the one hard-required field.
+    if (needConfirm && !confirmCity.trim()) {
+      Alert.alert('City required', 'Please enter the city to continue.');
+      return;
+    }
+    const confirmHasStates = ['united states', 'united states of america', 'usa', 'us']
+      .includes(confirmCountry.trim().toLowerCase());
     setSaving(true);
     try {
+      const body = {
+        google_place_id: selectedPlace.google_place_id,
+        name: selectedPlace.name,
+        address: selectedPlace.address,
+        neighborhood: selectedPlace.neighborhood || null,
+        lat: selectedPlace.lat,
+        lng: selectedPlace.lng,
+        categories: [{ category_id: selectedCategory?.id || null, tier }],
+        cuisine: cuisine.trim(),
+      };
+      if (needConfirm) {
+        body.location_confirmed = true;
+        body.city = confirmCity.trim();
+        body.country = confirmCountry.trim() || null;
+        // State is the full name ("New York"); the server stores the 2-letter code.
+        body.state = confirmHasStates ? (confirmState.trim() || null) : null;
+        body.neighborhood = confirmNeighborhood.trim() || null;
+      } else if (selectedPlace.manual && selectedPlace.manualCity) {
+        // Manual entry already collected a required city — resolve in ONE pass.
+        body.location_confirmed = true;
+        body.city = selectedPlace.manualCity;
+        body.neighborhood = selectedPlace.neighborhood || null;
+      }
       const data = await api.json('/api/places/add-mobile', {
         method: 'POST',
-        body: JSON.stringify({
-          google_place_id: selectedPlace.google_place_id,
-          name: selectedPlace.name,
-          address: selectedPlace.address,
-          neighborhood: selectedPlace.neighborhood || null,
-          lat: selectedPlace.lat,
-          lng: selectedPlace.lng,
-          categories: [{ category_id: selectedCategory?.id || null, tier }],
-          cuisine: cuisine.trim(),
-        }),
+        body: JSON.stringify(body),
       });
 
       const isRankedTier = ['S', 'A', 'B', 'C'].includes(tier);
@@ -257,7 +407,22 @@ export default function AddPlaceScreen({ navigation, route }) {
         ]);
       }
     } catch (e) {
-      Alert.alert('Error', e.message);
+      // Uncertain location: reveal the confirm panel pre-filled with whatever
+      // the server could extract; user completes it and saves again.
+      if (e.need_location_confirm) {
+        const loc = e.location || {};
+        setConfirmCountries(loc.countries || []);
+        // states arrive as [{code, name}] — show the full names.
+        setConfirmStates((loc.states || []).map(s => (s && s.name) ? s.name : s));
+        setConfirmCountry(loc.country || '');
+        setConfirmState(loc.state || '');   // already the full name from the server
+        setConfirmCity(prev => prev || loc.city || '');
+        setConfirmNeighborhood(prev => prev || loc.neighborhood || '');
+        setNeedConfirm(true);
+        Alert.alert('Confirm location', e.message || 'Please confirm the location for this place.');
+      } else {
+        Alert.alert('Error', e.message);
+      }
     } finally {
       setSaving(false);
     }
@@ -308,14 +473,21 @@ export default function AddPlaceScreen({ navigation, route }) {
                   onChangeText={setManualAddress}
                   autoCorrect={false}
                 />
-                <Text style={styles.sectionLabel}>Neighborhood / City <Text style={styles.optional}>(optional)</Text></Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Williamsburg, Brooklyn"
-                  placeholderTextColor={COLORS.textLight}
+                <Text style={styles.sectionLabel}>City <Text style={styles.required}>*</Text></Text>
+                <GeoField
+                  value={manualCity}
+                  onChange={setManualCity}
+                  placeholder="Start typing — pick an existing city"
+                  fetchOptions={geoCitySource}
+                  allowNew dupWarn noun="city" danger
+                />
+                <Text style={styles.sectionLabel}>Neighborhood <Text style={styles.optional}>(optional)</Text></Text>
+                <GeoField
                   value={manualNeighborhood}
-                  onChangeText={setManualNeighborhood}
-                  autoCorrect={false}
+                  onChange={setManualNeighborhood}
+                  placeholder="e.g. Williamsburg"
+                  fetchOptions={geoNbhdSource}
+                  allowNew dupWarn noun="neighborhood"
                 />
                 <Text style={styles.manualHint}>
                   We'll save this place without Google data — you can rank and log it like any other.
@@ -440,6 +612,62 @@ export default function AddPlaceScreen({ navigation, route }) {
             )}
           </View>
 
+          {/* Location confirm — only shown when the server flags the location as
+              uncertain (need_location_confirm). City is the one hard-required
+              field; country defaults from the address; state is US-only/optional. */}
+          {needConfirm && (
+            <View>
+              <View style={styles.confirmBanner}>
+                <Text style={styles.confirmBannerText}>
+                  We couldn't fully verify this location — please confirm it.
+                </Text>
+              </View>
+              <Text style={styles.sectionLabel}>Country</Text>
+              <GeoField
+                value={confirmCountry}
+                onChange={setConfirmCountry}
+                placeholder="Start typing a country"
+                staticOptions={confirmCountries.map(c => ({ name: c }))}
+                allowNew noun="country"
+              />
+              {['united states', 'united states of america', 'usa', 'us'].includes(confirmCountry.trim().toLowerCase()) && (
+                <>
+                  <Text style={styles.sectionLabel}>State</Text>
+                  <GeoField
+                    value={confirmState}
+                    onChange={setConfirmState}
+                    placeholder="Start typing a state"
+                    staticOptions={confirmStates.map(s => ({ name: s }))}
+                    allowNew={false} noun="state"
+                  />
+                </>
+              )}
+              <Text style={styles.sectionLabel}>City <Text style={styles.required}>*</Text></Text>
+              <GeoField
+                value={confirmCity}
+                onChange={setConfirmCity}
+                placeholder="Start typing — pick an existing city"
+                fetchOptions={geoCitySource}
+                allowNew dupWarn noun="city" danger
+                onPickItem={(item) => {
+                  // Selecting an existing city auto-fills its country/state (dedup).
+                  if (item && !item.isNew && item.data) {
+                    if (item.data.country) setConfirmCountry(item.data.country);
+                    if (item.data.state_name) setConfirmState(item.data.state_name);
+                  }
+                }}
+              />
+              <Text style={styles.sectionLabel}>Neighborhood <Text style={styles.optional}>(optional)</Text></Text>
+              <GeoField
+                value={confirmNeighborhood}
+                onChange={setConfirmNeighborhood}
+                placeholder="e.g. Williamsburg"
+                fetchOptions={geoNbhdSource}
+                allowNew dupWarn noun="neighborhood"
+              />
+            </View>
+          )}
+
           {/* Tier */}
           <Text style={styles.sectionLabel}>Initial Tier</Text>
           <View style={styles.chipRow}>
@@ -544,4 +772,6 @@ const styles = StyleSheet.create({
   manualToggleText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.gold },
   manualHint: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 10 },
   manualBack: { alignItems: 'center', marginTop: 12 },
+  confirmBanner: { backgroundColor: '#FCEBEB', borderRadius: 10, padding: 10, marginTop: 12, marginBottom: 2 },
+  confirmBannerText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: '#791F1F' },
 });

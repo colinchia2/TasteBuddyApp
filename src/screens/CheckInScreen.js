@@ -65,7 +65,7 @@ export default function CheckInScreen({ navigation }) {
     }
   }
 
-  async function checkIn(place) {
+  async function checkIn(place, cityName) {
     setConfirming(place.google_place_id);
     try {
       const data = await api.json('/api/places/gps-checkin', {
@@ -76,6 +76,7 @@ export default function CheckInScreen({ navigation }) {
           address: place.address || null,
           lat: place.lat || null,
           lng: place.lng || null,
+          city: (cityName || '').trim() || null,
         }),
       });
       setCheckedIn({
@@ -87,7 +88,26 @@ export default function CheckInScreen({ navigation }) {
       });
       setStep('confirmed');
     } catch (e) {
-      Alert.alert('Error', e.message);
+      // Hard block: server couldn't resolve a city. Prompt for one, then retry.
+      if (e.need_city) {
+        Alert.prompt(
+          'City required',
+          e.message || 'Enter the city for this place.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Save',
+              onPress: (val) => {
+                if (val && val.trim()) checkIn(place, val.trim());
+                else Alert.alert('City required', 'Please enter a city to continue.');
+              },
+            },
+          ],
+          'plain-text',
+        );
+      } else {
+        Alert.alert('Error', e.message);
+      }
     } finally {
       setConfirming(null);
     }

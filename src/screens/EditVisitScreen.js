@@ -57,11 +57,22 @@ export default function EditVisitScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [existingPhotos, setExistingPhotos] = useState([]); // [{id, url}]
   const [newPhotos, setNewPhotos] = useState([]); // [{uri}]
+  const [linkedNote, setLinkedNote] = useState(''); // "Logged in Lunch + Dinner — edits apply to all."
 
   useEffect(() => {
     if (visitId) {
       api.json(`/api/photos?visit_id=${visitId}`)
         .then(data => setExistingPhotos(data))
+        .catch(() => {});
+      // Linked-visit note: same place logged in 2+ categories as one visit.
+      api.json(`/api/visits/${visitId}/group-mobile`)
+        .then(g => {
+          if (g && g.group_size > 1 && (g.group_categories || []).length > 1) {
+            setLinkedNote(`Logged in ${g.group_categories.join(' + ')} — edits apply to all.`);
+          } else {
+            setLinkedNote('');
+          }
+        })
         .catch(() => {});
     }
   }, [visitId]);
@@ -160,6 +171,13 @@ export default function EditVisitScreen({ navigation, route }) {
           <View style={styles.placeRow}>
             <Text style={styles.placeName}>{placeName}</Text>
           </View>
+
+          {/* Linked-visit note (place logged in 2+ categories as one visit) */}
+          {linkedNote ? (
+            <View style={styles.linkedNote}>
+              <Text style={styles.linkedNoteText}>{linkedNote}</Text>
+            </View>
+          ) : null}
 
           {/* Date */}
           <View style={styles.section}>
@@ -339,6 +357,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.goldLight, borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
   },
   placeName: { fontSize: 15, fontWeight: '700', color: COLORS.gold },
+  linkedNote: {
+    marginHorizontal: 20, marginTop: 12, padding: 10,
+    backgroundColor: COLORS.goldLight, borderRadius: 8,
+  },
+  linkedNoteText: { fontSize: 12, color: '#633806' },
   section: { paddingHorizontal: 20, marginTop: 24 },
   label: { fontSize: 11, fontWeight: '700', color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   optional: { fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: 11 },

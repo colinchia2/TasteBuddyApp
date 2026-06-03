@@ -120,7 +120,8 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
     try {
       const result = await api.json('/api/onboarding/add-place', {
         method: 'POST',
-        body: JSON.stringify({ name, google_place_id: googlePlaceId || null, category, tier: 'TBE' }),
+        // Pass the onboarding city so a new Place always resolves one server-side.
+        body: JSON.stringify({ name, google_place_id: googlePlaceId || null, category, tier: 'TBE', city: city || null }),
       });
       const newPlace = { user_place_id: result.user_place_id, place_id: result.place_id, name };
       const newPlaces = [...places, newPlace];
@@ -132,7 +133,11 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
         loadSuggestions(newPlaces.map(p => p.name), true);
       }
     } catch (e) {
-      Alert.alert('Error', e.message);
+      if (e.need_city) {
+        Alert.alert('City needed', 'Please set your city earlier in onboarding before adding places.');
+      } else {
+        Alert.alert('Error', e.message);
+      }
       setAddingSet(prev => { const next = new Set(prev); next.delete(key); return next; });
       return;
     }

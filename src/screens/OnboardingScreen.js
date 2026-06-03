@@ -108,7 +108,7 @@ export default function OnboardingScreen() {
         const sugg = suggestions.find(s => s.name === name);
         const result = await api.json('/api/onboarding/add-place', {
           method: 'POST',
-          body: JSON.stringify({ name, category: sugg?.category, tier }),
+          body: JSON.stringify({ name, category: sugg?.category, tier, city: city || null }),
         });
         if (result.place_id) {
           addedPlaces.push({ name, place_id: result.place_id });
@@ -123,7 +123,11 @@ export default function OnboardingScreen() {
       await api.json('/api/onboarding/complete', { method: 'POST' });
       await refreshUser();
     } catch (e) {
-      Alert.alert('Error', e.message);
+      if (e.need_city) {
+        Alert.alert('City needed', 'Please choose your city above before continuing.');
+      } else {
+        Alert.alert('Error', e.message);
+      }
     } finally {
       setLoading(false);
     }
