@@ -51,12 +51,14 @@ export default function SetReminderActionCard({ data }) {
     setLoading(true);
     try {
       const time24 = time12To24h(reminderTime || '9:00 AM');
-      const dt = new Date(`${isoDate}T${time24}`);
+      // Send the user's LOCAL wall-clock (naive, no Z). The server converts to
+      // UTC via the user's timezone — same authority path as web (not the
+      // device's zone via toISOString).
       const resp = await api.json('/api/reminders', {
         method: 'POST',
         body: JSON.stringify({
           place_name: data.place_name || null,
-          reminder_at: dt.toISOString(),
+          reminder_at: `${isoDate}T${time24}:00`,
           reason: reason.trim(),
         }),
       });

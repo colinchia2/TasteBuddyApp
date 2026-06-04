@@ -12,6 +12,20 @@ export function AuthProvider({ children }) {
     bootCheck();
   }, []);
 
+  // Send the device's IANA timezone so the stored zone stays accurate (heals
+  // legacy NULLs; device-wins). The endpoint no-ops when unchanged.
+  async function _captureTimezone(token) {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!tz || !token) return;
+      await fetch(`${BASE_URL}/api/user/timezone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ timezone: tz }),
+      });
+    } catch {}
+  }
+
   async function bootCheck() {
     try {
       const token = await AsyncStorage.getItem('access_token');
@@ -21,6 +35,7 @@ export function AuthProvider({ children }) {
       });
       if (res.ok) {
         setUser(await res.json());
+        _captureTimezone(token);
       } else {
         await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
       }
@@ -40,6 +55,7 @@ export function AuthProvider({ children }) {
     const meBody = await meRes.json();
     if (meRes.ok) {
       setUser(meBody);
+      _captureTimezone(data.access_token);
     } else {
       throw new Error('Could not load user after authentication');
     }

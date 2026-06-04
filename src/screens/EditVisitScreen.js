@@ -8,6 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { api, BASE_URL } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
+import { presentPhotoSource, pickLastPhoto } from '../utils/photoSource';
 
 function fmtDate(d) {
   const y = d.getFullYear();
@@ -126,6 +127,35 @@ export default function EditVisitScreen({ navigation, route }) {
     setCatTiers(prev => ({ ...prev, [upId]: tier }));
   }
 
+  function addPhoto() {
+    if (existingPhotos.length + newPhotos.length >= 5) { Alert.alert('Max 5 photos'); return; }
+    presentPhotoSource({
+      onLast: () => pickLastPhoto({ onUri: uploadOnePhoto, onLibrary: pickPhoto }),
+      onLibrary: pickPhoto,
+    });
+  }
+
+  // Edit mode uploads immediately (the visit exists). Shared by "Choose from
+  // library" and "Last photo taken" — single upload path, reused.
+  async function uploadOnePhoto(uri) {
+    if (!uri || !placeId) return;
+    const photo = { uri };
+    setNewPhotos(prev => [...prev, photo]);
+    try {
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'photo.jpg';
+      formData.append('file', { uri, name: filename, type: 'image/jpeg' });
+      formData.append('place_id', String(placeId));
+      formData.append('visit_id', String(visitId));
+      const data = await api.upload('/api/photos/upload', formData);
+      setNewPhotos(prev => prev.filter(p => p.uri !== uri));
+      setExistingPhotos(prev => [...prev, { id: data.photo_id, url: data.url }]);
+    } catch (e) {
+      setNewPhotos(prev => prev.filter(p => p.uri !== uri));
+      Alert.alert('Upload failed', e.message);
+    }
+  }
+
   async function pickPhoto() {
     if (existingPhotos.length + newPhotos.length >= 5) { Alert.alert('Max 5 photos'); return; }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -136,23 +166,7 @@ export default function EditVisitScreen({ navigation, route }) {
       quality: 0.9,
     });
     if (!result.canceled && result.assets?.[0]) {
-      const photo = { uri: result.assets[0].uri };
-      setNewPhotos(prev => [...prev, photo]);
-      try {
-        if (placeId) {
-          const formData = new FormData();
-          const filename = photo.uri.split('/').pop();
-          formData.append('file', { uri: photo.uri, name: filename, type: 'image/jpeg' });
-          formData.append('place_id', String(placeId));
-          formData.append('visit_id', String(visitId));
-          const data = await api.upload('/api/photos/upload', formData);
-          setNewPhotos(prev => prev.filter(p => p.uri !== photo.uri));
-          setExistingPhotos(prev => [...prev, { id: data.photo_id, url: data.url }]);
-        }
-      } catch (e) {
-        setNewPhotos(prev => prev.filter(p => p.uri !== photo.uri));
-        Alert.alert('Upload failed', e.message);
-      }
+      uploadOnePhoto(result.assets[0].uri);
     }
   }
 
@@ -430,7 +444,7 @@ export default function EditVisitScreen({ navigation, route }) {
                 </View>
               ))}
               {existingPhotos.length + newPhotos.length < 5 && (
-                <TouchableOpacity style={styles.photoAdd} onPress={pickPhoto}>
+                <TouchableOpacity style={styles.photoAdd} onPress={addPhoto}>
                   <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
                 </TouchableOpacity>
               )}

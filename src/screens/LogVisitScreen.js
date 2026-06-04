@@ -9,6 +9,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import ScreenHeader from '../components/ScreenHeader';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
+import { presentPhotoSource, pickLastPhoto } from '../utils/photoSource';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -310,6 +311,18 @@ export default function LogVisitScreen({ navigation, route }) {
   }
 
   // ── Photos ────────────────────────────────────────────────────────────────────
+  function addPhoto() {
+    if (photos.length >= 5) { Alert.alert('Max 5 photos'); return; }
+    presentPhotoSource({
+      // Log a Visit defers upload until save — both options just queue the uri.
+      onLast: () => pickLastPhoto({
+        onUri: (uri) => setPhotos(prev => [...prev, { uri }]),
+        onLibrary: pickPhoto,
+      }),
+      onLibrary: pickPhoto,
+    });
+  }
+
   async function pickPhoto() {
     if (photos.length >= 5) { Alert.alert('Max 5 photos'); return; }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -710,7 +723,7 @@ export default function LogVisitScreen({ navigation, route }) {
               </View>
             ))}
             {photos.length < 5 && (
-              <TouchableOpacity style={styles.photoAdd} onPress={pickPhoto}>
+              <TouchableOpacity style={styles.photoAdd} onPress={addPhoto}>
                 <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
               </TouchableOpacity>
             )}
