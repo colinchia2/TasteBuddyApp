@@ -223,7 +223,7 @@ export default function CheckInScreen({ navigation }) {
         )}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.placeCard}
+            style={[styles.placeCard, item.already_saved && styles.placeCardSaved]}
             onPress={() => checkIn(item)}
             disabled={confirming === item.google_place_id}
           >
@@ -234,6 +234,9 @@ export default function CheckInScreen({ navigation }) {
                 <Text style={styles.placeType}>{item.types[0].replace(/_/g, ' ')}</Text>
               ) : null}
             </View>
+            {item.already_saved && (
+              <View style={styles.savedBadge}><Text style={styles.savedBadgeText}>In your list</Text></View>
+            )}
             {confirming === item.google_place_id
               ? <ActivityIndicator size="small" color={COLORS.gold} />
               : <Ionicons name="chevron-forward" size={18} color={COLORS.textLight} />
@@ -272,6 +275,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, marginBottom: 10, borderRadius: 14,
     borderWidth: 0.5, borderColor: COLORS.border, padding: 16,
   },
+  // Already-saved places: S-tier cream tint + gold outline (locked tokens).
+  placeCardSaved: { backgroundColor: COLORS.goldLight, borderWidth: 1, borderColor: COLORS.gold },
+  savedBadge: { backgroundColor: COLORS.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginRight: 8, flexShrink: 0 },
+  savedBadgeText: { fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#fff' },
   placeName: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.text },
   placeAddr: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   placeType: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight, marginTop: 3, textTransform: 'capitalize' },

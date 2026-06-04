@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
-  TextInput, ScrollView, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Keyboard,
+  View, Text, StyleSheet, TouchableOpacity,
+  TextInput, ScrollView, Platform,
+  ActivityIndicator, Keyboard, Animated, Alert, PanResponder,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
@@ -14,6 +15,8 @@ import AddPlaceActionCard from '../components/actions/AddPlaceActionCard';
 import LogVisitActionCard from '../components/actions/LogVisitActionCard';
 import SetReminderActionCard from '../components/actions/SetReminderActionCard';
 import AddCategoryActionCard from '../components/actions/AddCategoryActionCard';
+import ChecklistHeartIcon from '../components/ChecklistHeartIcon';
+import ClarifyingQuestions from '../components/ClarifyingQuestions';
 
 const TOP_TILES = [
   {
@@ -72,6 +75,16 @@ const LOADING_PHASES = [
 ];
 const LOADING_PHASE_FINAL = 'Putting the Cherry on Top…';
 
+function fmtRecentDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const days = Math.floor((new Date() - d) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export default function HomeScreen({ navigation, route }) {
   const { user } = useAuth();
   const [chatActive, setChatActive] = useState(false);
@@ -81,6 +94,7 @@ export default function HomeScreen({ navigation, route }) {
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
+  const [recentSessions, setRecentSessions] = useState([]);
   const scrollRef = useRef(null);
   const chatInputRef = useRef(null);
   const phaseTimerRef = useRef(null);
@@ -107,6 +121,56 @@ export default function HomeScreen({ navigation, route }) {
     setCompletedActions(prev => ({ ...prev, [cardId]: true }));
     navigation.setParams({ actionCompleted: undefined });
   }, [route?.params?.actionCompleted]);
+
+  function loadRecentSessions() {
+    api.json('/api/chat/sessions')
+      .then(data => setRecentSessions((data || []).slice(0, 8)))
+      .catch(() => {});
+  }
+  useEffect(() => { loadRecentSessions(); }, []);
+
+  // Long-press a recent chat → rename or delete. Delete removes it from the
+  // shared DB, so it's gone from history on web AND app.
+  function recentChatActions(session) {
+    Alert.alert(session.title || 'Chat', undefined, [
+      { text: 'Rename', onPress: () => renameRecentChat(session) },
+      { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteRecentChat(session) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+  function renameRecentChat(session) {
+    Alert.prompt(
+      'Rename chat',
+      'Enter a new name for this conversation.',
+      async (newTitle) => {
+        const t = (newTitle || '').trim();
+        if (!t) return;
+        try {
+          await api.json(`/api/chat/sessions/${session.id}/rename`, {
+            method: 'POST', body: JSON.stringify({ title: t }),
+          });
+          setRecentSessions(prev => prev.map(s => (s.id === session.id ? { ...s, title: t } : s)));
+        } catch (_) {}
+      },
+      'plain-text',
+      session.title || '',
+    );
+  }
+  function confirmDeleteRecentChat(session) {
+    Alert.alert('Delete chat?', 'This removes it from your history everywhere.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.json(`/api/chat/sessions/${session.id}`, { method: 'DELETE' });
+            setRecentSessions(prev => prev.filter(s => s.id !== session.id));
+            if (conversationId === session.id) resetChat();
+          } catch (_) {}
+        },
+      },
+    ]);
+  }
 
   async function loadSession(session) {
     try {
@@ -159,10 +223,16 @@ export default function HomeScreen({ navigation, route }) {
       setLoadingPhase(LOADING_PHASE_FINAL);
       await new Promise(r => setTimeout(r, 700));
       const msgIndex = messages.length + 1; // +1 for the user msg just added
+      // Broad discovery query → render the server's structured clarifying
+      // questions (NOT generic follow-up chips, which fired literal text and
+      // looped). Otherwise show normal follow-ups.
+      const clarifyQuestions = (data.is_clarifying && Array.isArray(data.questions) && data.questions.length)
+        ? data.questions : null;
       setMessages(prev => [...prev, {
         role: 'ai',
         text: data.response || 'No response received.',
-        followUps: getFollowUps(data.mode),
+        clarifyQuestions,
+        followUps: clarifyQuestions ? [] : getFollowUps(data.mode),
         actions: data.actions || [],
         msgIndex,
       }]);
@@ -189,17 +259,63 @@ export default function HomeScreen({ navigation, route }) {
     setConversationId(null);
     setInputText('');
     setLoadingPhase(LOADING_PHASES[0]);
+    loadRecentSessions();   // refresh recent-chats list after a conversation
   }
+
+  // ── Keyboard-aware composer offset ──────────────────────────────────────
+  // Drive the input's bottom padding from the keyboard's endCoordinates.height
+  // (which INCLUDES the QuickType suggestion bar). While the keyboard is up we
+  // measure from the keyboard top with only a small GAP and DROP the bottom
+  // safe-area inset (the keyboard already covers the home-indicator area); on
+  // hide we restore the inset so the input rests correctly at the bottom.
+  const insets = useSafeAreaInsets();
+  const GAP = 8;
+  const kbVisible = useRef(false);
+  const kbPad = useRef(new Animated.Value(insets.bottom + GAP)).current;
+
+  useEffect(() => {
+    if (!kbVisible.current) kbPad.setValue(insets.bottom + GAP);
+  }, [insets.bottom]);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = (e) => {
+      kbVisible.current = true;
+      const h = (e && e.endCoordinates && e.endCoordinates.height) || 0;
+      Animated.timing(kbPad, {
+        toValue: h + GAP,                       // flush above keyboard, no safe inset
+        duration: (e && e.duration) || 250,     // match the keyboard's animation
+        useNativeDriver: false,                  // animating layout (paddingBottom)
+      }).start();
+    };
+    const onHide = (e) => {
+      kbVisible.current = false;
+      Animated.timing(kbPad, {
+        toValue: insets.bottom + GAP,            // restore safe-area inset at rest
+        duration: (e && e.duration) || 250,
+        useNativeDriver: false,
+      }).start();
+    };
+    const subShow = Keyboard.addListener(showEvt, onShow);
+    const subHide = Keyboard.addListener(hideEvt, onHide);
+    return () => { subShow.remove(); subHide.remove(); };
+  }, [insets.bottom]);
+
+  // Swipe right from within the chat → go BACK to the home/ask state (the chat
+  // is a state, not a pushed screen, so we emulate the native back gesture).
+  // Only claims clearly-horizontal rightward swipes, so vertical scroll/taps work.
+  const swipeBack = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) => g.dx > 18 && Math.abs(g.dx) > Math.abs(g.dy) * 1.8,
+      onPanResponderRelease: (_e, g) => { if (g.dx > 70) resetChat(); },
+    })
+  ).current;
 
   const firstName = user?.display_name?.split(' ')[0] || 'there';
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
-      <SafeAreaView style={styles.safe}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
         {/* Header — always visible, even during chat */}
         <View style={styles.header}>
           <TouchableOpacity onPress={resetChat} activeOpacity={0.75} style={styles.logoBtn}>
@@ -215,13 +331,7 @@ export default function HomeScreen({ navigation, route }) {
               style={styles.iconBtn}
               onPress={() => navigation.navigate('Activity')}
             >
-              <Ionicons name="receipt-outline" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={() => navigation.navigate('ChatHistory')}
-            >
-              <Ionicons name="time-outline" size={24} color={COLORS.text} />
+              <ChecklistHeartIcon size={24} color={COLORS.text} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.iconBtn}
@@ -270,6 +380,7 @@ export default function HomeScreen({ navigation, route }) {
 
         {/* Chat messages */}
         {chatActive && (
+          <View style={styles.chatScroll} {...swipeBack.panHandlers}>
           <ScrollView
             ref={scrollRef}
             style={styles.chatScroll}
@@ -286,7 +397,13 @@ export default function HomeScreen({ navigation, route }) {
                   <View>
                     <View style={[styles.bubble, styles.bubbleAI]}>
                       <MarkdownMessage text={msg.text} />
-                      {msg.followUps?.length > 0 && (
+                      {msg.clarifyQuestions ? (
+                        <ClarifyingQuestions
+                          questions={msg.clarifyQuestions}
+                          onSubmit={(t) => sendMessage(t)}
+                          onSurprise={() => sendMessage('Surprise me — just give me your best picks, no more questions.')}
+                        />
+                      ) : msg.followUps?.length > 0 ? (
                         <View style={styles.followUpRow}>
                           {msg.followUps.map((fu, j) => (
                             <TouchableOpacity
@@ -298,7 +415,7 @@ export default function HomeScreen({ navigation, route }) {
                             </TouchableOpacity>
                           ))}
                         </View>
-                      )}
+                      ) : null}
                     </View>
                     {msg.actions?.length > 0 && (
                       <View style={styles.actionCards}>
@@ -335,6 +452,7 @@ export default function HomeScreen({ navigation, route }) {
               </View>
             )}
           </ScrollView>
+          </View>
         )}
 
         {/* Suggestions — shown when chat is NOT active */}
@@ -357,8 +475,36 @@ export default function HomeScreen({ navigation, route }) {
           </ScrollView>
         )}
 
-        {/* Input bar */}
-        <View style={styles.inputSection}>
+        {/* Recent chats fill the space above the composer (and pin it to the
+            bottom). During an active conversation the chat ScrollView plays that
+            role instead. Falls back to an empty spacer when there are no chats. */}
+        {!chatActive && (
+          recentSessions.length > 0 ? (
+            <View style={styles.recentWrap}>
+              <View style={styles.recentHeader}>
+                <Text style={styles.recentLabel}>Recent chats</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('ChatHistory')}>
+                  <Text style={styles.recentSeeAll}>See all</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recentList} keyboardShouldPersistTaps="handled">
+                {recentSessions.map(s => (
+                  <TouchableOpacity key={s.id} style={styles.recentRow} onPress={() => loadSession(s)} onLongPress={() => recentChatActions(s)} delayLongPress={300} activeOpacity={0.75}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.gold} style={{ marginRight: 10 }} />
+                    <Text style={styles.recentTitle} numberOfLines={1}>{s.title || 'Untitled chat'}</Text>
+                    <Text style={styles.recentDate}>{fmtRecentDate(s.updated_at)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )
+        )}
+
+        {/* Input bar — paddingBottom is keyboard-driven (endCoordinates), and
+            drops the safe-area inset while the keyboard is visible. */}
+        <Animated.View style={[styles.inputSection, { paddingBottom: kbPad }]}>
           {chatActive && (
             <TouchableOpacity onPress={resetChat} style={styles.newChatBtn}>
               <Ionicons name="refresh" size={14} color={COLORS.textMuted} />
@@ -376,6 +522,10 @@ export default function HomeScreen({ navigation, route }) {
               onSubmitEditing={() => sendMessage()}
               returnKeyType="send"
               multiline={false}
+              autoCorrect={true}
+              spellCheck={true}
+              autoCapitalize="sentences"
+              keyboardType="default"
             />
             <TouchableOpacity
               style={[styles.sendBtn, (!inputText.trim() || loading) && styles.sendBtnDisabled]}
@@ -392,9 +542,8 @@ export default function HomeScreen({ navigation, route }) {
               </Text>
             </Text>
           )}
-        </View>
-      </SafeAreaView>
-    </KeyboardAvoidingView>
+        </Animated.View>
+    </View>
   );
 }
 
@@ -474,7 +623,23 @@ const styles = StyleSheet.create({
   },
   suggestText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.text, lineHeight: 16 },
 
-  inputSection: { paddingHorizontal: 16, paddingBottom: 12, paddingTop: 8 },
+  recentWrap: { flex: 1, paddingHorizontal: 16, paddingTop: 6 },
+  recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  recentLabel: {
+    fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  recentSeeAll: { fontFamily: 'DMSans_700Bold', fontSize: 12, color: COLORS.gold },
+  recentList: { paddingBottom: 8 },
+  recentRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border,
+    paddingHorizontal: 12, paddingVertical: 11, marginBottom: 8,
+  },
+  recentTitle: { flex: 1, fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.text, marginRight: 8 },
+  recentDate: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight },
+
+  inputSection: { paddingHorizontal: 16, paddingTop: 8 },  // paddingBottom is keyboard-driven (kbPad)
   newChatBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     alignSelf: 'flex-start', marginBottom: 8,

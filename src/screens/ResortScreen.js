@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  SafeAreaView, Alert, FlatList,
+  SafeAreaView, Alert,
 } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 import { COLORS } from '../constants/colors';
@@ -31,25 +32,9 @@ export default function ResortScreen({ navigation, route }) {
     }
   }
 
-  function moveUp(idx) {
-    if (idx === 0) return;
-    setItems(prev => {
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      return next.map((p, i) => ({ ...p, position: i + 1 }));
-    });
-  }
-
-  function moveDown(idx) {
-    setItems(prev => {
-      if (idx >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      return next.map((p, i) => ({ ...p, position: i + 1 }));
-    });
-  }
-
   async function save() {
+    // Save contract is unchanged — same endpoint/payload the arrow version used;
+    // only the input mechanism (drag vs arrows) changed.
     setSaving(true);
     try {
       await api.json('/api/places/resort/save-order', {
@@ -74,43 +59,62 @@ export default function ResortScreen({ navigation, route }) {
     );
   }
 
+  const renderItem = ({ item, drag, isActive, getIndex }) => {
+    const index = getIndex() ?? 0;
+    return (
+      <ScaleDecorator>
+        <TouchableOpacity
+          style={[styles.row, isActive && styles.rowActive]}
+          onLongPress={drag}
+          delayLongPress={150}
+          disabled={isActive}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.rank}>#{index + 1}</Text>
+          <View style={styles.rowContent}>
+            <Text style={styles.name}>{item.name}</Text>
+            {item.cuisine ? <Text style={styles.cuisine}>{item.cuisine}</Text> : null}
+          </View>
+          {/* Grab handle — press and drag to reorder. */}
+          <TouchableOpacity
+            onPressIn={drag}
+            style={styles.dragHandle}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="reorder-three" size={24} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </ScaleDecorator>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="close" size={24} color={COLORS.textMuted} />
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="chevron-back" size={22} color={COLORS.gold} />
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Reorder S-Tier</Text>
-        <TouchableOpacity onPress={save} disabled={saving}>
+        <TouchableOpacity onPress={save} disabled={saving} style={styles.saveBtn}>
           {saving
             ? <ActivityIndicator color={COLORS.gold} size="small" />
             : <Text style={styles.saveText}>Save</Text>
           }
         </TouchableOpacity>
       </View>
-      <Text style={styles.subtitle}>{category}</Text>
+      <Text style={styles.subtitle}>{category} · long-press a row or use the handle to drag</Text>
 
-      <FlatList
+      <DraggableFlatList
         data={items}
         keyExtractor={item => String(item.id)}
+        onDragEnd={({ data }) => setItems(data.map((p, i) => ({ ...p, position: i + 1 })))}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
-        renderItem={({ item, index }) => (
-          <View style={styles.row}>
-            <Text style={styles.rank}>#{index + 1}</Text>
-            <View style={styles.rowContent}>
-              <Text style={styles.name}>{item.name}</Text>
-              {item.cuisine ? <Text style={styles.cuisine}>{item.cuisine}</Text> : null}
-            </View>
-            <View style={styles.arrows}>
-              <TouchableOpacity onPress={() => moveUp(index)} style={styles.arrowBtn}>
-                <Ionicons name="chevron-up" size={20} color={index === 0 ? COLORS.border : COLORS.textMuted} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => moveDown(index)} style={styles.arrowBtn}>
-                <Ionicons name="chevron-down" size={20} color={index === items.length - 1 ? COLORS.border : COLORS.textMuted} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        renderItem={renderItem}
       />
     </SafeAreaView>
   );
@@ -121,9 +125,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
+    paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12,
   },
-  title: { fontFamily: 'Outfit_700Bold', fontSize: 18, color: COLORS.text },
+  backBtn: { flexDirection: 'row', alignItems: 'center', minWidth: 72 },
+  backText: { fontSize: 15, color: COLORS.gold, fontFamily: 'DMSans_500Medium', marginLeft: 2 },
+  title: { flex: 1, textAlign: 'center', fontFamily: 'Outfit_700Bold', fontSize: 18, color: COLORS.text },
+  saveBtn: { minWidth: 72, alignItems: 'flex-end' },
   saveText: { fontSize: 15, color: COLORS.gold, fontWeight: '700', fontFamily: 'DMSans_700Bold' },
   subtitle: {
     fontSize: 12, color: COLORS.textMuted, fontFamily: 'DMSans_400Regular',
@@ -134,6 +141,11 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border,
     padding: 14, marginBottom: 8,
   },
+  rowActive: {
+    backgroundColor: COLORS.goldLight, borderColor: COLORS.gold,
+    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 }, elevation: 4,
+  },
   rank: {
     fontSize: 13, fontWeight: '700', color: COLORS.gold,
     fontFamily: 'DMSans_700Bold', width: 36,
@@ -141,6 +153,5 @@ const styles = StyleSheet.create({
   rowContent: { flex: 1 },
   name: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text },
   cuisine: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
-  arrows: { flexDirection: 'row', gap: 4 },
-  arrowBtn: { padding: 4 },
+  dragHandle: { padding: 4, marginLeft: 8 },
 });

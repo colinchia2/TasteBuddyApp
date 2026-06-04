@@ -47,6 +47,15 @@ function geoNbhdSource(q) {
     .then(rows => (rows || []).map(r => ({ name: r.name })))
     .catch(() => []);
 }
+// Google Places ADDRESS predictions for the manual address field. Each option's
+// `data` carries the full description + a best-effort city for prefilling.
+function addressSource(q) {
+  const s = (q || '').trim();
+  if (s.length < 3) return Promise.resolve([]);
+  return api.json('/api/places/address-autocomplete?q=' + encodeURIComponent(s))
+    .then(rows => (rows || []).map(r => ({ name: r.description, sub: r.secondary || '', data: r })))
+    .catch(() => []);
+}
 
 // Type-ahead-with-select. Selecting an existing value is the PRIMARY action (reuses
 // the exact record — "New York" → city 39, no dup); "+ Add" is the EXPLICIT
@@ -465,13 +474,19 @@ export default function AddPlaceScreen({ navigation, route }) {
                   autoCorrect={false}
                 />
                 <Text style={styles.sectionLabel}>Address</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Street address"
-                  placeholderTextColor={COLORS.textLight}
+                <GeoField
                   value={manualAddress}
-                  onChangeText={setManualAddress}
-                  autoCorrect={false}
+                  onChange={setManualAddress}
+                  placeholder="Start typing the address"
+                  fetchOptions={addressSource}
+                  allowNew={false}
+                  onPickItem={(item) => {
+                    const d = item?.data || {};
+                    if (d.description) setManualAddress(d.description);
+                    // Prefill city from the picked address (resolved/deduped at
+                    // save via resolve_city); don't clobber a city already typed.
+                    if (d.city) setManualCity((prev) => (prev && prev.trim() ? prev : d.city));
+                  }}
                 />
                 <Text style={styles.sectionLabel}>City <Text style={styles.required}>*</Text></Text>
                 <GeoField
@@ -504,9 +519,19 @@ export default function AddPlaceScreen({ navigation, route }) {
                 data={results}
                 keyExtractor={(item, i) => item.google_place_id || String(i)}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.resultRow} onPress={() => pickPlace(item)}>
-                    <Text style={styles.resultName}>{item.name}</Text>
-                    <Text style={styles.resultAddr}>{item.address || item.vicinity || ''}</Text>
+                  <TouchableOpacity
+                    style={[styles.resultRow, item.already_saved && styles.resultRowSaved]}
+                    onPress={() => pickPlace(item)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.resultName}>{item.name}</Text>
+                      <Text style={styles.resultAddr}>{item.address || item.vicinity || ''}</Text>
+                    </View>
+                    {item.already_saved && (
+                      <View style={styles.savedBadge}>
+                        <Text style={styles.savedBadgeText}>In your list</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
                 )}
                 keyboardShouldPersistTaps="handled"
@@ -713,9 +738,16 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text,
   },
   resultRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 0.5,
     borderColor: COLORS.border, padding: 14, marginBottom: 8,
   },
+  // Already-saved places: S-tier cream tint + gold outline (locked tokens).
+  resultRowSaved: { backgroundColor: COLORS.goldLight, borderWidth: 1, borderColor: COLORS.gold },
+  savedBadge: {
+    backgroundColor: COLORS.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0,
+  },
+  savedBadgeText: { fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#fff' },
   resultName: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.text },
   resultAddr: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   selectedCard: {
