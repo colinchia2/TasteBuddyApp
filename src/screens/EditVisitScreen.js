@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, Image,
@@ -23,7 +23,6 @@ function formatDateDisplay(isoDate) {
 }
 
 const OCCASIONS = ['Date night', 'Solo', 'Business', 'Family', 'Friends', 'Special occasion'];
-const TIERS = ['S', 'A', 'B', 'C', 'NEXT_UP', 'TBE'];
 const PARTY_SIZES = [1, 2, 3, 4, 5];
 const TOD_CHIPS = [
   { label: 'Breakfast', value: 'Breakfast' },
@@ -34,48 +33,98 @@ const TOD_CHIPS = [
 ];
 
 export default function EditVisitScreen({ navigation, route }) {
-  const {
-    visitId, placeId, placeName,
-    tier: initialTier,
-    occasion: initialOccasion,
-    notes: initialNotes,
-    meal_period: initialMealPeriod,
-    party_size: initialPartySize,
-    spending: initialSpending,
-    visited_at: initialVisitedAt,
-  } = route.params || {};
+  const { visitId, placeId, placeName } = route.params || {};
 
-  const initialDate = initialVisitedAt ? new Date(initialVisitedAt) : new Date();
-  const [visitDate, setVisitDate] = useState(fmtDate(initialDate));
+  // Form state (prefilled from the server, not nav params — so unedited shared
+  // fields aren't wiped when they sync across the linked group on save).
+  const [visitDate, setVisitDate] = useState(fmtDate(new Date()));
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [tier, setTier] = useState(initialTier || '');
-  const [occasion, setOccasion] = useState(initialOccasion || '');
-  const [notes, setNotes] = useState(initialNotes || '');
-  const [mealPeriod, setMealPeriod] = useState(initialMealPeriod || '');
-  const [partySize, setPartySize] = useState(initialPartySize || null);
-  const [totalSpent, setTotalSpent] = useState(initialSpending ? String(initialSpending) : '');
+  const [occasion, setOccasion] = useState('');
+  const [notes, setNotes] = useState('');
+  const [mealPeriod, setMealPeriod] = useState('');
+  const [partySize, setPartySize] = useState(null);
+  const [totalSpent, setTotalSpent] = useState('');
+  const origTimeRef = useRef('12:00'); // preserve the visit's time-of-day across a date edit
+
+  // Per-category tiers (matches Log a Visit + the web edit modal)
+  const [categories, setCategories] = useState([]); // [{user_place_id, tier, category, cuisine}]
+  const [checkedCats, setCheckedCats] = useState({}); // { user_place_id: true }
+  const [catTiers, setCatTiers] = useState({}); // { user_place_id: tierStr }
+  const origCatTiersRef = useRef({}); // tiers at load — guards the pairwise redirect
+
+  const [loadingData, setLoadingData] = useState(true);
   const [loading, setLoading] = useState(false);
   const [existingPhotos, setExistingPhotos] = useState([]); // [{id, url}]
   const [newPhotos, setNewPhotos] = useState([]); // [{uri}]
-  const [linkedNote, setLinkedNote] = useState(''); // "Logged in Lunch + Dinner — edits apply to all."
+  const [linkedNote, setLinkedNote] = useState('');
 
+  // ── Load full visit detail + this place's categories ──────────────────────
   useEffect(() => {
-    if (visitId) {
-      api.json(`/api/photos?visit_id=${visitId}`)
-        .then(data => setExistingPhotos(data))
-        .catch(() => {});
-      // Linked-visit note: same place logged in 2+ categories as one visit.
-      api.json(`/api/visits/${visitId}/group-mobile`)
-        .then(g => {
-          if (g && g.group_size > 1 && (g.group_categories || []).length > 1) {
-            setLinkedNote(`Logged in ${g.group_categories.join(' + ')} — edits apply to all.`);
-          } else {
-            setLinkedNote('');
-          }
-        })
-        .catch(() => {});
-    }
-  }, [visitId]);
+    if (!visitId) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingData(true);
+      try {
+        const [detail, cats] = await Promise.all([
+          api.json(`/api/visits/${visitId}/mobile`),
+          placeId ? api.json(`/api/places/${placeId}/categories-mobile`) : Promise.resolve([]),
+        ]);
+        if (cancelled) return;
+
+        // Shared fields
+        if (detail.visited_at) {
+          const [d, t] = detail.visited_at.split('T');
+          if (d) setVisitDate(d);
+          origTimeRef.current = (t || '').slice(0, 5) || '12:00';
+        }
+        setMealPeriod(detail.meal_period || '');
+        setOccasion(detail.occasion || '');
+        setPartySize(detail.party_size || null);
+        setTotalSpent(detail.spending != null ? String(detail.spending) : '');
+        setNotes(detail.notes || '');
+        if (detail.group_size > 1 && (detail.group_categories || []).length > 1) {
+          setLinkedNote(`Logged in ${detail.group_categories.join(' + ')} — edits apply to all.`);
+        }
+
+        // Categories + pre-check EVERY category in this visit's group. Checking
+        // only the clicked one would make the save reconcile the group down to it
+        // and silently delete the siblings. Each tier is seeded from its current
+        // ranking so an untouched save preserves it.
+        setCategories(cats);
+        const memberIds = (detail.group_member_user_place_ids && detail.group_member_user_place_ids.length)
+          ? detail.group_member_user_place_ids
+          : (detail.user_place_id != null ? [detail.user_place_id] : []);
+        const memberSet = new Set(memberIds.map(String));
+        const checked = {};
+        const tiers = {};
+        cats.forEach(c => {
+          tiers[c.user_place_id] = c.tier;
+          if (memberSet.has(String(c.user_place_id))) checked[c.user_place_id] = true;
+        });
+        setCheckedCats(checked);
+        setCatTiers(tiers);
+        origCatTiersRef.current = tiers;
+
+        // Existing photos
+        try {
+          const ph = await api.json(`/api/photos?visit_id=${visitId}`);
+          if (!cancelled) setExistingPhotos(ph);
+        } catch {}
+      } catch (e) {
+        if (!cancelled) Alert.alert('Error', 'Could not load this visit.');
+      } finally {
+        if (!cancelled) setLoadingData(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [visitId, placeId]);
+
+  function toggleCat(upId) {
+    setCheckedCats(prev => ({ ...prev, [upId]: !prev[upId] }));
+  }
+  function setCatTier(upId, tier) {
+    setCatTiers(prev => ({ ...prev, [upId]: tier }));
+  }
 
   async function pickPhoto() {
     if (existingPhotos.length + newPhotos.length >= 5) { Alert.alert('Max 5 photos'); return; }
@@ -89,7 +138,6 @@ export default function EditVisitScreen({ navigation, route }) {
     if (!result.canceled && result.assets?.[0]) {
       const photo = { uri: result.assets[0].uri };
       setNewPhotos(prev => [...prev, photo]);
-      // Upload immediately
       try {
         if (placeId) {
           const formData = new FormData();
@@ -125,28 +173,49 @@ export default function EditVisitScreen({ navigation, route }) {
   }
 
   async function save() {
+    const activeCats = categories.filter(c => checkedCats[c.user_place_id]);
+    if (activeCats.length === 0) { Alert.alert('Select at least one category'); return; }
     setLoading(true);
     try {
+      // Combine the (possibly edited) date with the visit's original time so a
+      // date-only edit doesn't reset the time to midnight across the group.
+      const visitedAt = `${visitDate}T${origTimeRef.current || '12:00'}:00`;
       const body = {
-        visited_at: visitDate,
-        tier_at_visit: tier || null,
+        visited_at: visitedAt,
         occasion: occasion || null,
         notes: notes.trim() || null,
         meal_period: mealPeriod || null,
         party_size: partySize || null,
         spending: totalSpent ? parseFloat(totalSpent) : null,
+        user_place_tiers: activeCats.map(c => ({
+          user_place_id: c.user_place_id,
+          tier: catTiers[c.user_place_id] || c.tier,
+        })),
       };
-      await api.json(`/api/visits/${visitId}/mobile`, {
+      const data = await api.json(`/api/visits/${visitId}/mobile`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       });
-      navigation.goBack();
+      const tierChangedToS = activeCats.some(c => {
+        const newTier = catTiers[c.user_place_id] || c.tier;
+        return newTier === 'S' && origCatTiersRef.current[c.user_place_id] !== 'S';
+      });
+      if (data.pairwise_data && tierChangedToS) {
+        navigation.replace('Pairwise', {
+          newId: data.pairwise_data.new_id,
+          category: data.pairwise_data.category,
+        });
+      } else {
+        navigation.goBack();
+      }
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
       setLoading(false);
     }
   }
+
+  const checkedCount = categories.filter(c => checkedCats[c.user_place_id]).length;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -159,10 +228,10 @@ export default function EditVisitScreen({ navigation, route }) {
               <Text style={styles.cancel}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.title}>Edit Visit</Text>
-            <TouchableOpacity onPress={save} disabled={loading}>
+            <TouchableOpacity onPress={save} disabled={loading || loadingData}>
               {loading
                 ? <ActivityIndicator color={COLORS.gold} size="small" />
-                : <Text style={styles.save}>Save</Text>
+                : <Text style={[styles.save, (loadingData) && { opacity: 0.4 }]}>Save</Text>
               }
             </TouchableOpacity>
           </View>
@@ -172,12 +241,39 @@ export default function EditVisitScreen({ navigation, route }) {
             <Text style={styles.placeName}>{placeName}</Text>
           </View>
 
+          {loadingData ? (
+            <ActivityIndicator color={COLORS.gold} style={{ marginTop: 40 }} />
+          ) : (
+          <>
           {/* Linked-visit note (place logged in 2+ categories as one visit) */}
           {linkedNote ? (
             <View style={styles.linkedNote}>
               <Text style={styles.linkedNoteText}>{linkedNote}</Text>
             </View>
           ) : null}
+
+          {/* Categories */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Categories</Text>
+            {categories.length === 0
+              ? <Text style={styles.emptyNote}>No categories found for this place.</Text>
+              : categories.map(cat => (
+                  <TouchableOpacity
+                    key={cat.user_place_id}
+                    style={styles.catRow}
+                    onPress={() => toggleCat(cat.user_place_id)}
+                  >
+                    <View style={[styles.checkbox, checkedCats[cat.user_place_id] && styles.checkboxChecked]}>
+                      {checkedCats[cat.user_place_id] && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.catName}>{cat.category}</Text>
+                      {cat.cuisine ? <Text style={styles.catCuisine}>{cat.cuisine}</Text> : null}
+                    </View>
+                  </TouchableOpacity>
+                ))
+            }
+          </View>
 
           {/* Date */}
           <View style={styles.section}>
@@ -200,26 +296,33 @@ export default function EditVisitScreen({ navigation, route }) {
             )}
           </View>
 
-          {/* Tier */}
+          {/* Tier — one block per checked category */}
           <View style={styles.section}>
-            <Text style={styles.label}>How was it?</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {TIERS.map(t => {
-                const tc = TIER_COLORS[t];
-                const active = tier === t;
-                return (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.tierChip, { backgroundColor: active ? tc.bg : COLORS.borderLight, borderColor: active ? tc.text : 'transparent' }]}
-                    onPress={() => setTier(active ? '' : t)}
-                  >
-                    <Text style={[styles.tierChipText, { color: active ? tc.text : COLORS.textMuted }]}>
-                      {tc.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            <Text style={styles.label}>How was it? <Text style={styles.optional}>(per category)</Text></Text>
+            {checkedCount === 0
+              ? <Text style={styles.emptyNote}>Check a category above to set its tier.</Text>
+              : categories.filter(c => checkedCats[c.user_place_id]).map(cat => (
+                  <View key={cat.user_place_id} style={styles.tierBlock}>
+                    <Text style={styles.tierBlockLabel}>{cat.category} Tier</Text>
+                    <View style={styles.tierRow}>
+                      {Object.entries(TIER_COLORS).map(([t, tc]) => {
+                        const active = (catTiers[cat.user_place_id] || cat.tier) === t;
+                        return (
+                          <TouchableOpacity
+                            key={t}
+                            style={[styles.catTierChip, { backgroundColor: active ? tc.bg : COLORS.borderLight }]}
+                            onPress={() => setCatTier(cat.user_place_id, t)}
+                          >
+                            <Text style={[styles.catTierChipText, { color: active ? tc.text : COLORS.textMuted }]}>
+                              {tc.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))
+            }
           </View>
 
           {/* Time of Day */}
@@ -335,6 +438,8 @@ export default function EditVisitScreen({ navigation, route }) {
           </View>
 
           <View style={{ height: 40 }} />
+          </>
+          )}
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>
@@ -365,6 +470,7 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 20, marginTop: 24 },
   label: { fontSize: 11, fontWeight: '700', color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   optional: { fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: 11 },
+  emptyNote: { fontSize: 13, color: COLORS.textMuted },
   input: {
     backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 0.5,
     borderColor: COLORS.border, paddingHorizontal: 16, paddingVertical: 13,
@@ -378,8 +484,31 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   dateBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.gold },
-  tierChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1.5 },
-  tierChipText: { fontSize: 13, fontWeight: '600' },
+
+  // Categories
+  catRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 12 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6, borderWidth: 1.5,
+    borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxChecked: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  checkmark: { color: '#fff', fontSize: 13, fontWeight: '700', lineHeight: 16 },
+  catName: { fontSize: 14, fontWeight: '500', color: COLORS.text },
+  catCuisine: { fontSize: 12, color: COLORS.textMuted },
+
+  // Per-category tier blocks
+  tierBlock: {
+    backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 0.5,
+    borderColor: COLORS.border, padding: 14, marginBottom: 12,
+  },
+  tierBlockLabel: {
+    fontSize: 11, fontWeight: '700', color: COLORS.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10,
+  },
+  tierRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  catTierChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  catTierChipText: { fontSize: 13, fontWeight: '700' },
+
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
@@ -404,7 +533,6 @@ const styles = StyleSheet.create({
   },
   spentPrefix: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginRight: 4 },
   spentInput: { flex: 1, fontSize: 15, color: COLORS.text, paddingVertical: 13, padding: 0 },
-  optional: { fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: 11 },
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   photoThumb: { width: 72, height: 72, borderRadius: 10, overflow: 'hidden', position: 'relative' },
   photoImg: { width: '100%', height: '100%' },
