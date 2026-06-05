@@ -42,7 +42,21 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TasteBuddy uses your location to check you in at Places and find spots near you."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TasteBuddy needs access to your photos so you can attach pictures to your visits.",
+          "cameraPermission": "TasteBuddy needs camera access so you can take photos of your visits."
+        }
+      ],
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
