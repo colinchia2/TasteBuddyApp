@@ -87,20 +87,60 @@ export default function RankingsScreen({ navigation, route }) {
 
   const isEmpty = !loading && sections.length === 0;
 
-  // Filter triggers: tier always; a geo/cuisine trigger only when there's >1 value to
-  // choose between (state only when any place has one — mirrors the site's conditional).
-  const triggers = [
-    { key: 'tier', title: 'Tier', show: allPlaces.length > 0 },
-    { key: 'cuisine', title: 'Cuisine', show: vocab.cuisine.length > 1 },
-    { key: 'city', title: 'City', show: vocab.city.length > 1 },
-    { key: 'neighborhood', title: 'Neighborhood', show: vocab.neighborhood.length > 1 },
-    { key: 'country', title: 'Country', show: vocab.country.length > 1 },
-    { key: 'state', title: 'State', show: vocab.state.length > 0 },
-  ].filter((t) => t.show);
+  // Filters render in two labelled groups, every filter always shown for a complete,
+  // consistent set. A filter is ENABLED only when there's a real choice (>=2 distinct
+  // values; state >=1; tier whenever there are places); otherwise it renders GREYED
+  // (disabled). Category is always greyed — this screen is already scoped to one
+  // category (the group/order mirrors the web rankings filter bar).
+  const CAT_CUISINE = [
+    { key: 'category', title: 'Category' },
+    { key: 'cuisine', title: 'Cuisine' },
+    { key: 'tier', title: 'Tier' },
+  ];
+  const LOCATION = [
+    { key: 'country', title: 'Country' },
+    { key: 'state', title: 'State' },
+    { key: 'city', title: 'City' },
+    { key: 'neighborhood', title: 'Neighborhood' },
+  ];
+
+  const isEnabled = (key) => {
+    if (key === 'category') return false;             // scoped screen → always greyed
+    if (key === 'tier') return allPlaces.length > 0;
+    if (key === 'state') return vocab.state.length >= 1;
+    return (vocab[key] || []).length >= 2;
+  };
 
   const triggerLabel = (key, title) => {
+    if (key === 'category') return categoryName || title;   // the current category
     if (key === 'tier') return filters.tier ? tierKeyToLabel(filters.tier) : title;
     return filters[key] || title;
+  };
+
+  const renderTrigger = (t) => {
+    const enabled = isEnabled(t.key);
+    const active = enabled && !!filters[t.key];
+    return (
+      <TouchableOpacity
+        key={t.key}
+        style={[styles.trigger, active && styles.triggerActive, !enabled && styles.triggerDisabled]}
+        onPress={() => { if (enabled) setActiveModal(t.key); }}
+        disabled={!enabled}
+        activeOpacity={0.75}
+      >
+        <Text
+          style={[styles.triggerText, active && styles.triggerTextActive, !enabled && styles.triggerTextDisabled]}
+          numberOfLines={1}
+        >
+          {triggerLabel(t.key, t.title)}
+        </Text>
+        <Ionicons
+          name="chevron-down" size={13}
+          color={active ? '#fff' : (enabled ? COLORS.textMuted : COLORS.textLight)}
+          style={{ marginLeft: 4 }}
+        />
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -124,30 +164,25 @@ export default function RankingsScreen({ navigation, route }) {
         />
       </View>
 
-      {/* Filter triggers — flex-wrap row (no horizontal scroll → no clipping/expanding) */}
+      {/* Filters — two labelled groups (flex-wrap, no horizontal scroll). Name search
+          sits above; greyed pills mean there's no choice to make for that filter. */}
+      <Text style={styles.groupLabel}>Category &amp; Cuisine</Text>
       <View style={styles.filterRow}>
-        {triggers.map((t) => {
-          const active = !!filters[t.key];
-          return (
-            <TouchableOpacity
-              key={t.key}
-              style={[styles.trigger, active && styles.triggerActive]}
-              onPress={() => setActiveModal(t.key)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.triggerText, active && styles.triggerTextActive]} numberOfLines={1}>
-                {triggerLabel(t.key, t.title)}
-              </Text>
-              <Ionicons name="chevron-down" size={13} color={active ? '#fff' : COLORS.textMuted} style={{ marginLeft: 4 }} />
-            </TouchableOpacity>
-          );
-        })}
-        {anyActive ? (
-          <TouchableOpacity style={styles.clearAll} onPress={() => { clearAll(); setQ(''); }} activeOpacity={0.75}>
-            <Text style={styles.clearAllText}>Clear</Text>
-          </TouchableOpacity>
-        ) : null}
+        {CAT_CUISINE.map((t) => renderTrigger(t))}
       </View>
+
+      <Text style={styles.groupLabel}>Location</Text>
+      <View style={styles.filterRow}>
+        {LOCATION.map((t) => renderTrigger(t))}
+      </View>
+
+      {anyActive ? (
+        <View style={styles.clearRow}>
+          <TouchableOpacity style={styles.clearAll} onPress={() => { clearAll(); setQ(''); }} activeOpacity={0.75}>
+            <Text style={styles.clearAllText}>Clear filters</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={COLORS.gold} /></View>
@@ -228,16 +263,26 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, marginTop: 12, paddingHorizontal: 14,
   },
   searchInput: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text, paddingVertical: 11 },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingTop: 10 },
+  // Muted group subheader — reuses the caption color/font (no new tokens).
+  groupLabel: {
+    fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.6,
+    paddingHorizontal: 16, marginTop: 14, marginBottom: 6,
+  },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
   trigger: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 0.5, borderColor: COLORS.border,
     paddingHorizontal: 12, paddingVertical: 7, maxWidth: 200,
   },
   triggerActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  // Greyed/disabled: dimmed, non-interactive (no choice to make for this filter).
+  triggerDisabled: { backgroundColor: COLORS.offWhite, borderColor: COLORS.borderLight, opacity: 0.55 },
   triggerText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.textMuted },
   triggerTextActive: { color: '#fff' },
-  clearAll: { justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 7 },
+  triggerTextDisabled: { color: COLORS.textLight },
+  clearRow: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 12 },
+  clearAll: { justifyContent: 'center', paddingVertical: 4 },
   clearAllText: { fontFamily: 'DMSans_700Bold', fontSize: 12, color: COLORS.danger },
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -12,6 +12,13 @@ import { COLORS, TIER_COLORS } from '../constants/colors';
 const TIER_ORDER = ['S', 'A', 'B', 'C', 'NEXT_UP', 'TBE'];
 const TIER_SHORT = { S: 'S', A: 'A', B: 'B', C: 'C', NEXT_UP: 'Next', TBE: 'TBE' };
 
+// Section header copy — single source of truth (mirrors the web my_places labels).
+const SECTION_LABELS = {
+  primary: 'Primary Categories',
+  user: 'User-Added Categories',
+  other: 'Other',
+};
+
 // My Places → Categories. Single column, one tile per row. Primary categories
 // (Breakfast/Lunch/Dinner) first, a divider, then user-added alphabetical, then
 // Other. Each tile shows per-tier counts (all 6) + total — same numbers as the site.
@@ -66,6 +73,9 @@ export default function MyPlacesScreen({ navigation }) {
             </View>
           ) : (
             <>
+              {data.primary.length > 0 ? (
+                <Text style={styles.sectionLabel}>{SECTION_LABELS.primary}</Text>
+              ) : null}
               {data.primary.map((cat) => (
                 <CategoryTile key={cat.id} cat={cat} onPress={() => openCategory(cat)} />
               ))}
@@ -74,10 +84,18 @@ export default function MyPlacesScreen({ navigation }) {
                 <View style={styles.divider} />
               ) : null}
 
+              {data.user_added.length > 0 ? (
+                <Text style={styles.sectionLabel}>{SECTION_LABELS.user}</Text>
+              ) : null}
               {data.user_added.map((cat) => (
                 <CategoryTile key={cat.id} cat={cat} onPress={() => openCategory(cat)} />
               ))}
 
+              {data.other ? (
+                <Text style={[styles.sectionLabel, data.user_added.length > 0 && { marginTop: 18 }]}>
+                  {SECTION_LABELS.other}
+                </Text>
+              ) : null}
               {data.other ? (
                 <CategoryTile cat={data.other} onPress={() => openCategory(data.other)} muted />
               ) : null}
@@ -123,6 +141,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { padding: 16, paddingBottom: 40 },
   subtitle: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted, marginBottom: 16 },
+  // Muted section subheader — reuses the caption color/font (no new tokens), set
+  // bold/uppercase to read as a group label (mirrors the web .tile-section-label).
+  sectionLabel: {
+    fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10,
+  },
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 10, marginHorizontal: 4 },
   tile: {
     backgroundColor: COLORS.white,
