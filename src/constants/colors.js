@@ -23,6 +23,12 @@ export const COLORS = {
   tierNextUpText: '#791F1F',
   tierTBE: '#FEFCE8',
   tierTBEText: '#713F12',
+
+  // Pills — must match design_tokens.css (--pill-cat-* / --pill-cui-*). No borders.
+  pillCatBg: '#85B7EB',
+  pillCatText: '#042C53',
+  pillCuiBg: '#B4B2A9',
+  pillCuiText: '#2C2C2A',
 };
 
 export const TIER_COLORS = {

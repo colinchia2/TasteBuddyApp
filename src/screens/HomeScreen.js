@@ -63,6 +63,22 @@ function getFollowUps(mode) {
   return (FOLLOW_UPS[mode] || FOLLOW_UPS.default).slice(0, 3);
 }
 
+// Port of the web client's _stripPartialBlocks (ask/index.html): while streaming,
+// hide any structural block that has opened (`---TAG---`) but not yet closed, so
+// the user never sees raw ---ACTIONS---/---PLACES---/etc. JSON mid-stream. On
+// stream_end we discard this and use the server's already-clean `response`.
+function stripPartialBlocks(text) {
+  let clean = text;
+  for (const tag of ['PLACES', 'ACTIONS', 'FOLLOWUPS', 'QUESTIONS', 'META']) {
+    const opener = '---' + tag + '---';
+    const idx = clean.lastIndexOf(opener);
+    if (idx !== -1 && !clean.substring(idx + opener.length).includes(opener)) {
+      clean = clean.substring(0, idx).trimEnd();
+    }
+  }
+  return clean;
+}
+
 const LOADING_PHASES = [
   'Analyzing your TasteBuds…',
   'Spoonfeeding the Model…',
@@ -91,6 +107,7 @@ export default function HomeScreen({ navigation, route }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [awaitingFirstToken, setAwaitingFirstToken] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
@@ -98,6 +115,12 @@ export default function HomeScreen({ navigation, route }) {
   const scrollRef = useRef(null);
   const chatInputRef = useRef(null);
   const phaseTimerRef = useRef(null);
+  // Streaming state: raw accumulated SSE text, the UI flush timer, the in-flight
+  // AbortController, and whether auto-scroll should follow growing content.
+  const streamRawRef = useRef('');
+  const flushTimerRef = useRef(null);
+  const streamAbortRef = useRef(null);
+  const autoScrollRef = useRef(false);
 
   useEffect(() => {
     if (chatActive && scrollRef.current) {
@@ -202,6 +225,71 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
+  // Throttle UI updates: deltas accumulate into streamRawRef; this interval flushes
+  // the stripped text into the streaming AI bubble every ~45ms (never per-token, to
+  // avoid re-render jank). `flushNow` forces a final paint at stream end.
+  function startFlushTimer() {
+    if (flushTimerRef.current) return;
+    flushTimerRef.current = setInterval(flushStreamingText, 45);
+  }
+  function stopFlushTimer() {
+    if (flushTimerRef.current) {
+      clearInterval(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+  }
+  function flushStreamingText() {
+    const display = stripPartialBlocks(streamRawRef.current);
+    setMessages(prev => {
+      const next = [...prev];
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].role === 'ai' && next[i].streaming) {
+          next[i] = { ...next[i], text: display };
+          break;
+        }
+      }
+      return next;
+    });
+  }
+
+  // Cancel any in-flight stream and stop timers when the screen unmounts.
+  useEffect(() => () => {
+    if (streamAbortRef.current) streamAbortRef.current.abort();
+    stopFlushTimer();
+    stopPhaseTimer();
+  }, []);
+
+  // Builds the finished AI message from the stream_end payload. Identical shape to
+  // the old non-streaming path so the rendered result (text + clarifying questions
+  // OR follow-up chips + action cards) is byte-for-byte what it was before — only
+  // the reveal is now incremental.
+  function finalizedAiMessage(evt) {
+    // Broad discovery query → render the server's structured clarifying questions
+    // (NOT generic follow-up chips, which fired literal text and looped).
+    const clarifyQuestions = (evt.is_clarifying && Array.isArray(evt.questions) && evt.questions.length)
+      ? evt.questions : null;
+    return {
+      role: 'ai',
+      text: evt.response || streamRawRef.current || 'No response received.',
+      clarifyQuestions,
+      followUps: clarifyQuestions ? [] : getFollowUps(evt.mode),
+      actions: evt.actions || [],
+      streaming: false,
+    };
+  }
+
+  // Replace the in-flight streaming AI bubble with `next`, or append it if none.
+  function replaceStreamingBubble(next) {
+    setMessages(prev => {
+      const out = [...prev];
+      for (let i = out.length - 1; i >= 0; i--) {
+        if (out[i].role === 'ai' && out[i].streaming) { out[i] = next; return out; }
+      }
+      out.push(next);
+      return out;
+    });
+  }
+
   async function sendMessage(text) {
     const msg = (text || inputText).trim();
     if (!msg || loading) return;
@@ -210,40 +298,115 @@ export default function HomeScreen({ navigation, route }) {
     setChatActive(true);
     setMessages(prev => [...prev, { role: 'user', text: msg }]);
     setLoading(true);
+    setAwaitingFirstToken(true);
     startPhaseTimer();
 
+    const convId = conversationId || `conv-${Date.now()}`;
+    if (!conversationId) setConversationId(convId);
+
+    streamRawRef.current = '';
+    autoScrollRef.current = true;
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
+    let bubbleAdded = false;
+    let gotStreamEnd = false;
+    const ensureBubble = () => {
+      if (bubbleAdded) return;
+      bubbleAdded = true;
+      setMessages(prev => [...prev, { role: 'ai', text: '', streaming: true }]);
+    };
+
     try {
-      const convId = conversationId || `conv-${Date.now()}`;
-      if (!conversationId) setConversationId(convId);
-      const data = await api.json('/api/ask/chat', {
-        method: 'POST',
-        body: JSON.stringify({ message: msg, conversation_id: convId }),
-      });
-      stopPhaseTimer();
-      setLoadingPhase(LOADING_PHASE_FINAL);
-      await new Promise(r => setTimeout(r, 700));
-      const msgIndex = messages.length + 1; // +1 for the user msg just added
-      // Broad discovery query → render the server's structured clarifying
-      // questions (NOT generic follow-up chips, which fired literal text and
-      // looped). Otherwise show normal follow-ups.
-      const clarifyQuestions = (data.is_clarifying && Array.isArray(data.questions) && data.questions.length)
-        ? data.questions : null;
-      setMessages(prev => [...prev, {
-        role: 'ai',
-        text: data.response || 'No response received.',
-        clarifyQuestions,
-        followUps: clarifyQuestions ? [] : getFollowUps(data.mode),
-        actions: data.actions || [],
-        msgIndex,
-      }]);
+      await api.stream('/api/ask/chat/stream',
+        { message: msg, conversation_id: convId },
+        {
+          signal: controller.signal,
+          onEvent: (evt) => {
+            if (evt.type === 'error') {
+              throw new Error(evt.message || 'stream_error');
+            }
+            if (evt.type === 'text_delta') {
+              if (!bubbleAdded) {
+                // First token: kill the typing indicator and reveal the bubble.
+                stopPhaseTimer();
+                setAwaitingFirstToken(false);
+                ensureBubble();
+                startFlushTimer();
+              }
+              streamRawRef.current += (evt.delta || '');
+            }
+            if (evt.type === 'stream_end') {
+              gotStreamEnd = true;
+              stopFlushTimer();
+              ensureBubble();   // guard: 0-token responses still get a bubble
+              replaceStreamingBubble(finalizedAiMessage(evt));
+            }
+          },
+        });
+
+      // Stream closed without a stream_end frame → treat as a mid-stream drop.
+      if (!gotStreamEnd) throw new Error('stream_incomplete');
     } catch (e) {
+      stopFlushTimer();
       stopPhaseTimer();
-      const errMsg = e.message === 'paywall'
-        ? "You've used your free questions. Upgrade at TasteBuddy.ai!"
-        : 'Something went wrong. Try again!';
-      setMessages(prev => [...prev, { role: 'ai', text: errMsg }]);
+      // User left/reset the chat — leave the UI as the reset already set it.
+      if (e.name === 'AbortError' || controller.signal.aborted) return;
+
+      // Out of free questions — show the upsell, skip the fallback round-trip.
+      if (e.status === 402 || e.message === 'paywall') {
+        replaceStreamingBubble({
+          role: 'ai',
+          text: "You've used your free questions. Upgrade at TasteBuddy.ai!",
+        });
+        return;
+      }
+
+      if (!bubbleAdded) {
+        // Failed before any token streamed → fall back to the non-streaming call
+        // (same endpoint family, identical payload), exactly like the web client.
+        try {
+          const data = await api.json('/api/ask/chat', {
+            method: 'POST',
+            body: JSON.stringify({ message: msg, conversation_id: convId }),
+          });
+          replaceStreamingBubble(finalizedAiMessage({
+            response: data.response, mode: data.mode,
+            is_clarifying: data.is_clarifying, questions: data.questions,
+            actions: data.actions || [],
+          }));
+          return;
+        } catch (fbErr) {
+          const paywall = fbErr.message === 'paywall' || fbErr.status === 402
+            || e.message === 'paywall' || e.status === 402;
+          setMessages(prev => [...prev, {
+            role: 'ai',
+            text: paywall
+              ? "You've used your free questions. Upgrade at TasteBuddy.ai!"
+              : 'Something went wrong. Try again!',
+            error: !paywall,
+            retryText: paywall ? null : msg,
+          }]);
+          return;
+        }
+      }
+
+      // Error after partial text → keep what streamed, append a retry affordance.
+      replaceStreamingBubble({
+        role: 'ai',
+        text: stripPartialBlocks(streamRawRef.current),
+        streaming: false,
+        error: true,
+        retryText: msg,
+        errorNote: 'Connection lost mid-response.',
+      });
     } finally {
+      stopFlushTimer();
+      stopPhaseTimer();
       setLoading(false);
+      setAwaitingFirstToken(false);
+      autoScrollRef.current = false;
+      if (streamAbortRef.current === controller) streamAbortRef.current = null;
     }
   }
 
@@ -253,7 +416,11 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   function resetChat() {
+    if (streamAbortRef.current) { streamAbortRef.current.abort(); streamAbortRef.current = null; }
+    stopFlushTimer();
     stopPhaseTimer();
+    setLoading(false);
+    setAwaitingFirstToken(false);
     setChatActive(false);
     setMessages([]);
     setConversationId(null);
@@ -367,6 +534,20 @@ export default function HomeScreen({ navigation, route }) {
                 </TouchableOpacity>
               ))}
             </View>
+            <TouchableOpacity
+              style={styles.browseTile}
+              onPress={() => navigation.navigate('MyPlaces')}
+              activeOpacity={0.82}
+            >
+              <View style={styles.browseIconWrap}>
+                <Ionicons name="list" size={22} color={COLORS.gold} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.browseTitle}>My Places</Text>
+                <Text style={styles.browseSub}>Browse your ranked Places</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.aiTile} onPress={activateAI} activeOpacity={0.82}>
               <Ionicons name="chatbubble-ellipses" size={26} color={COLORS.gold} style={{ marginRight: 14 }} />
               <View style={{ flex: 1 }}>
@@ -386,6 +567,11 @@ export default function HomeScreen({ navigation, route }) {
             style={styles.chatScroll}
             contentContainerStyle={styles.chatContent}
             keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => {
+              // Follow the growing response while streaming; don't fight the user
+              // once the turn settles.
+              if (autoScrollRef.current) scrollRef.current?.scrollToEnd({ animated: false });
+            }}
           >
             {messages.map((msg, i) => (
               <View key={i}>
@@ -397,7 +583,18 @@ export default function HomeScreen({ navigation, route }) {
                   <View>
                     <View style={[styles.bubble, styles.bubbleAI]}>
                       <MarkdownMessage text={msg.text} />
-                      {msg.clarifyQuestions ? (
+                      {msg.errorNote ? (
+                        <Text style={styles.errorNote}>{msg.errorNote}</Text>
+                      ) : null}
+                      {msg.error && msg.retryText ? (
+                        <TouchableOpacity
+                          style={styles.retryBtn}
+                          onPress={() => sendMessage(msg.retryText)}
+                        >
+                          <Ionicons name="refresh" size={14} color={COLORS.gold} style={{ marginRight: 6 }} />
+                          <Text style={styles.retryText}>Retry</Text>
+                        </TouchableOpacity>
+                      ) : msg.clarifyQuestions ? (
                         <ClarifyingQuestions
                           questions={msg.clarifyQuestions}
                           onSubmit={(t) => sendMessage(t)}
@@ -442,7 +639,7 @@ export default function HomeScreen({ navigation, route }) {
                 )}
               </View>
             ))}
-            {loading && (
+            {loading && awaitingFirstToken && (
               <View style={styles.loadingCard}>
                 <ActivityIndicator size="small" color={COLORS.gold} style={{ marginRight: 14 }} />
                 <View>
@@ -583,6 +780,18 @@ const styles = StyleSheet.create({
   },
   aiTileTitle: { fontFamily: 'Outfit_700Bold', fontSize: 15, color: COLORS.text },
   aiTileSub: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  browseTile: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.white, borderRadius: 16,
+    borderWidth: 0.5, borderColor: COLORS.border,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  browseIconWrap: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.goldLight,
+    alignItems: 'center', justifyContent: 'center', marginRight: 14,
+  },
+  browseTitle: { fontFamily: 'Outfit_700Bold', fontSize: 15, color: COLORS.text },
+  browseSub: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
 
   chatScroll: { flex: 1 },
   chatContent: { padding: 16, paddingBottom: 8 },
@@ -600,6 +809,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.gold, paddingHorizontal: 12, paddingVertical: 7,
   },
   followUpText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.tierSText },
+  errorNote: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.tierNextUpText, marginTop: 8 },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    backgroundColor: COLORS.goldLight, borderRadius: 14, borderWidth: 0.5,
+    borderColor: COLORS.gold, paddingHorizontal: 12, paddingVertical: 7, marginTop: 12,
+  },
+  retryText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.tierSText },
   actionCards: { marginBottom: 10 },
   loadingCard: {
     flexDirection: 'row', alignItems: 'center',

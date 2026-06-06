@@ -49,6 +49,8 @@ import EditVisitScreen from './src/screens/EditVisitScreen';
 import EditPlaceScreen from './src/screens/EditPlaceScreen';
 import PairwiseScreen from './src/screens/PairwiseScreen';
 import ResortScreen from './src/screens/ResortScreen';
+import MyPlacesScreen from './src/screens/MyPlacesScreen';
+import RankingsScreen from './src/screens/RankingsScreen';
 import EmailVerificationPendingScreen from './src/screens/EmailVerificationPendingScreen';
 
 const Stack = createNativeStackNavigator();
@@ -130,6 +132,8 @@ function RootNavigator() {
           <Stack.Screen name="EditPlace" component={EditPlaceScreen} />
           <Stack.Screen name="Pairwise" component={PairwiseScreen} />
           <Stack.Screen name="Resort" component={ResortScreen} />
+          <Stack.Screen name="MyPlaces" component={MyPlacesScreen} />
+          <Stack.Screen name="Rankings" component={RankingsScreen} />
         </>
       )}
     </Stack.Navigator>

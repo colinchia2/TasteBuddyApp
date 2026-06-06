@@ -108,6 +108,25 @@ Gold: #C8960C
 - `keyboardShouldPersistTaps="handled"` on any ScrollView/FlatList that contains buttons near a TextInput
 - All API errors returning HTML (`<`) mean a missing DB table on PythonAnywhere — run `python _dev_scripts/create_missing_tables.py` on PA
 
+## My Places — read-only browse (2026-06-06)
+- New entry point on `HomeScreen` home: a wide "My Places" tile below the Log a Visit / Add a Place action tiles (white card, gold list icon, `browseTile` styles) → navigates to `MyPlaces`.
+- `App.js` — registered `MyPlaces` (Categories) and `Rankings` screens.
+- `src/screens/MyPlacesScreen.js` — Categories grid (2-per-row roomy tiles) from `GET /api/places/users/categories`; tap → Rankings.
+- `src/screens/RankingsScreen.js` — per-category rankings from `GET /api/places/rankings?category=<id>`. SectionList grouped by tier (tier-colored section headers using `label` from server, e.g. "C-Tier — Okay"), client-side filters (tier chips, cuisine chips, name search — fetches once, refines locally; server always returns all 6 tiers). Tap a row → read-only card. Keys on slug.
+- `src/components/PlaceCardModal.js` — read-only bottom-sheet: name, TierBadge, category/cuisine pills, address/neighborhood/city, rating, price level. External links go ONLY to the restaurant's website / reservation_url / Google Maps (no TasteBuddy-site link — JWT app would hit a login wall). "Full details coming soon" note. NO visit/photo/edit/log UI (deferred).
+- `src/components/Pill.js` — NEW `CuisinePill` / `CategoryPill` (locked pill tokens, no borders).
+- `src/constants/colors.js` — added `pillCatBg/pillCatText/pillCuiBg/pillCuiText` to match design_tokens.css `--pill-*` (parity gate).
+- Reuses existing `TierBadge.js`. `PlacesScreen.js` remains orphaned/unused (not registered) — untouched.
+- READ-ONLY surface: no mutation endpoints touched. In-app Place Detail (visits/photos/editing) is the natural next phase.
+
+## AI chat streaming — token-by-token (2026-06-06)
+- `HomeScreen.js` Ask AI now STREAMS via SSE (was await-full-JSON). Calls `POST /api/ask/chat/stream` (the backend endpoint already existed, mirroring the web `/ask/api/stream` and reusing the shared `_run_pre_sonnet_pipeline()`). Non-streaming `POST /api/ask/chat` is kept as the pre-token fallback.
+- `src/api/client.js` — added `api.stream(path, body, {signal, onEvent})` using `import { fetch } from 'expo/fetch'` (the only fetch whose Response exposes `body.getReader()`). NO new native module — pure JS, OTA-pushable via EAS Update. Handles 401 refresh, paywall/non-OK (throws err.status/err.data), skips `: keepalive` comments.
+- SSE wire contract (identical to web): events `metadata` / `stream_start` / `text_delta`{delta} / `stream_end`{response,mode,is_clarifying,questions,actions,...} / `done` / `error`{message}.
+- Live block-strip: `stripPartialBlocks()` is a port of the web's `_stripPartialBlocks` — hides any opened-but-unclosed `---ACTIONS---/PLACES/FOLLOWUPS/QUESTIONS/META---` block so raw JSON never flashes mid-stream. On `stream_end` the server's already-clean `response` + structured arrays replace the buffer, so the FINAL rendered result (text + clarifying questions OR follow-up chips + action cards) is identical to the old path.
+- UI: typing indicator (`awaitingFirstToken`) transitions into the first token; deltas buffered and flushed every 45ms (never per-token); `onContentSizeChange` auto-scrolls while streaming; `AbortController` cancels on unmount / New chat / swipe-back; mid-stream error keeps partial text + shows a Retry chip; pre-token failure falls back to non-streaming.
+- Note: `TextDecoder` is a global in Expo SDK 56 (used by the reader loop).
+
 ## Recent changes (as of 2026-05-19)
 - App moved from `C:\Users\colin\TasteBuddyAppScaffold` → `C:\Users\colin\OneDrive\Documents\Python\TasteBuddyApp`
 - `iosClientId` added to Google OAuth in WelcomeScreen + LoginScreen (was throwing "iOS Client ID must be defined")
