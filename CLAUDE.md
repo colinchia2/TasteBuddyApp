@@ -1,28 +1,33 @@
 # TasteBuddy — React Native / Expo App
 
 ## What this is
-Expo (SDK 55) React Native app. Runs in Expo Go on iOS via QR code.
+Expo SDK 56 React Native app. Ships as **EAS dev + production builds → TestFlight** (left Expo Go).
 Backend: https://tastebuddy-colinchia2.pythonanywhere.com (same as web app)
+
+## Location (IMPORTANT)
+Canonical path is **`C:\dev\TasteBuddyApp`** — moved OFF OneDrive 2026-06-06 because OneDrive
+live-sync corrupts `node_modules` and crashes Metro (`TreeFS: Failed to make parent directory
+entry`). Do ALL app work here. The OneDrive copy (`…\Documents\Python\TasteBuddyApp`) is a
+frozen backup — do not edit it or run Metro from it. Build/EAS/TestFlight detail: AGENTS.md / memory.
 
 ## Companion web app
 Flask app lives at: `C:\Users\colin\OneDrive\Documents\Python\TasteBuddy`
 
-## Key commands
+## Key commands (run from C:\dev\TasteBuddyApp)
 ```
-# Start (preferred — same WiFi as phone)
-npx expo start --lan --clear
+# Start Metro for the dev build (tunnel = reliable on Windows; LAN often blocked by firewall on 8081)
+npx expo start --dev-client --tunnel
+npx expo whoami                       # should return: colinchia2
 
-# Start with tunnel (requires ngrok auth)
-npx expo start --tunnel
-
-# Check logged-in Expo user
-npx expo whoami   # should return: colinchia2
+# Production → TestFlight (INTERACTIVE Apple 2FA — run in a real terminal, not via tooling):
+eas build --profile production --platform ios
+eas submit --platform ios --latest    # internal TestFlight only; never submit for public App Store review
 ```
 
 ## Auth
 - JWT tokens stored in AsyncStorage (`access_token`, `refresh_token`)
 - All API calls go through `src/api/client.js` → `apiFetch()` which auto-refreshes on 401
-- Google OAuth uses `expo-auth-session/providers/google` v7
+- Google OAuth uses `expo-auth-session/providers/google` v7 — ⚠️ **DEAD in standalone/TestFlight builds** (the `auth.expo.io` proxy isn't supported there). Email/password login works; native-redirect rework is Phase 2.
   - `webClientId`: 918439480148-r36km6tsj5qub0fkhe1i9j8gftod5qms.apps.googleusercontent.com
   - `iosClientId`: 918439480148-skp68m8e98idt494ejr1h1bf14q6mh7k.apps.googleusercontent.com
   - Bundle ID: `com.colinchia.tastebuddy` (set in app.json)
@@ -103,7 +108,7 @@ All require `Authorization: Bearer <token>` header.
 Gold: #C8960C
 
 ## Important rules
-- Read Expo SDK 55 docs before writing any Expo-specific code: https://docs.expo.dev/versions/v55.0.0/
+- Read Expo SDK 56 docs before writing any Expo-specific code: https://docs.expo.dev/versions/v56.0.0/
 - Use `ScrollView` (not `FlatList` with ListHeaderComponent) for forms — FlatList remounts TextInputs on state change, collapsing the keyboard on every keystroke
 - `keyboardShouldPersistTaps="handled"` on any ScrollView/FlatList that contains buttons near a TextInput
 - All API errors returning HTML (`<`) mean a missing DB table on PythonAnywhere — run `python _dev_scripts/create_missing_tables.py` on PA

@@ -1,5 +1,11 @@
 # TasteBuddy v2 — Architecture Reference
 
+> **2026-06-06 update.** App canonical path = `C:\dev\TasteBuddyApp` (off OneDrive). Added since this doc was written:
+> - **Backend:** `app/services/rankings.py` — `build_category_summaries()` (primary/user split by NAME set Breakfast/Lunch/Dinner, NOT `is_primary`) + `group_user_places_by_tier()`; `app/utils.py google_maps_url()` (Jinja global + `maps_url` on the rankings serializer).
+> - **New API:** `GET /api/places/rankings` (per-category, all 6 tiers, +cuisine/geo/q), `GET /api/places/categories-summary`, `GET /api/places/saved-status`, `GET /api/places/check-duplicate`, `GET /api/places/pairwise/s-tier`, `POST /api/places/pairwise/pick`; `search`/`search-mine` include `google_place_id`. Internal DB reads log `api_log` with `service='internal'`.
+> - **App screens/components:** MyPlacesScreen, RankingsScreen, PlaceCardModal, FilterSelectModal, Pill, TierBadge. AI chat streaming via `POST /api/ask/chat/stream` (SSE; `api.stream()` in client.js).
+> - **Release:** Expo SDK 56; EAS dev+prod builds → TestFlight (1.0.0 build 2, ASC App ID 6777479059). OTA (EAS Update) pending.
+
 ## Directory Structure
 
 ```

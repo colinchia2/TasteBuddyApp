@@ -2,6 +2,12 @@
 
 > Paste this at the top of EVERY Claude Code prompt. It ensures consistency across web and app.
 
+> **⚠️ 2026-06-06 update — read first:**
+> - **App code is at `C:\dev\TasteBuddyApp`** (NOT OneDrive — sync corrupts node_modules + crashes Metro `TreeFS`). Web Flask repo stays at `C:\Users\colin\OneDrive\Documents\Python\TasteBuddy`.
+> - App = **Expo SDK 56**, ships via **EAS dev/prod builds → TestFlight** (not Expo Go). **Google sign-in is dead in standalone builds** — email/password works (native redirect = Phase 2).
+> - App now has full **My Places** (categories + per-category Rankings with grouped/greyed filters) + **AI chat streaming** (SSE). New backend: `/api/places/rankings`, `/api/places/categories-summary`, `/api/places/saved-status`, `pairwise/s-tier`+`pick`; `search`/`search-mine` return `google_place_id`; shared `app/services/rankings.py` + `app/utils.py google_maps_url()`.
+> - Primary-vs-user category split is by NAME set `('Breakfast','Lunch','Dinner')` in `rankings.py`, NOT the `is_primary` flag.
+
 ## Stack
 
 | Layer | Tech |
