@@ -8,6 +8,7 @@ import * as Location from 'expo-location';
 import ScreenHeader from '../components/ScreenHeader';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
+import { fetchBlendedPlaces } from '../utils/placeSearch';
 
 const TIERS = ['S', 'A', 'B', 'C', 'NEXT_UP', 'TBE'];
 const PRIMARY_NAMES = new Set(['Breakfast', 'Lunch', 'Dinner']);
@@ -246,11 +247,12 @@ export default function AddPlaceScreen({ navigation, route }) {
   async function searchGooglePlaces(q) {
     setSearching(true);
     try {
-      let url = `/api/places/google-autocomplete?q=${encodeURIComponent(q)}`;
-      if (userLocation) {
-        url += `&lat=${userLocation.lat}&lng=${userLocation.lng}`;
-      }
-      const data = await api.json(url);
+      // Blended: your saved matches on top (highlighted), Google results below,
+      // de-duped by google_place_id. DB-only saved lookup — no extra Google call.
+      const data = await fetchBlendedPlaces(
+        q,
+        userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : {}
+      );
       setResults(data);
     } catch {
       setResults([]);

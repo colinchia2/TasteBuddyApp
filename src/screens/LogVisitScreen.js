@@ -10,6 +10,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
 import { presentPhotoSource, pickLastPhoto } from '../utils/photoSource';
+import { fetchBlendedPlaces } from '../utils/placeSearch';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -256,17 +257,30 @@ export default function LogVisitScreen({ navigation, route }) {
   async function doSearch(q) {
     setSearching(true);
     try {
-      const data = await api.json(`/api/places/search-mine?q=${encodeURIComponent(q)}`);
+      // Blended: your saved matches on top (highlighted), Google results below,
+      // de-duped by google_place_id. DB-only saved lookup — no extra Google call.
+      const data = await fetchBlendedPlaces(q);
       setSearchResults(data);
     } catch { setSearchResults([]); }
     finally { setSearching(false); }
   }
 
   function pickPlace(item) {
-    setPlaceId(item.place_id);
-    setPlaceName(item.name);
-    setSearchResults([]);
-    setPhase('form');
+    if (item.already_saved && item.place_id) {
+      // Saved place → log against the EXISTING place (no re-add, no duplicate).
+      setPlaceId(item.place_id);
+      setPlaceName(item.name);
+      setSearchResults([]);
+      setPhase('form');
+      return;
+    }
+    // Google-only place not in your list → mirror the app's add-then-log: route
+    // into Add a Place (confirm-location / resolve_city). Its existing post-add
+    // flow continues into Log a Visit and runs pairwise for an S-tier.
+    navigation.navigate('AddPlace', {
+      googlePlaceId: item.google_place_id,
+      placeName: item.name,
+    });
   }
 
   // ── Date picker ───────────────────────────────────────────────────────────────
@@ -424,7 +438,7 @@ export default function LogVisitScreen({ navigation, route }) {
               <TextInput
                 ref={searchInputRef}
                 style={styles.searchInput}
-                placeholder="Search your places…"
+                placeholder="Search for a place…"
                 placeholderTextColor={COLORS.textLight}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -433,10 +447,19 @@ export default function LogVisitScreen({ navigation, route }) {
               />
               {searching && <ActivityIndicator size="small" color={COLORS.gold} style={{ marginLeft: 8 }} />}
             </View>
-            {searchResults.map(item => (
-              <TouchableOpacity key={item.user_place_id || item.place_id} style={styles.resultRow} onPress={() => pickPlace(item)}>
-                <Text style={styles.resultName}>{item.name}</Text>
-                <Text style={styles.resultMeta}>{item.category || item.cuisine || ''}</Text>
+            {searchResults.map((item, i) => (
+              <TouchableOpacity
+                key={item.google_place_id || item.place_id || String(i)}
+                style={[styles.resultRow, item.already_saved && styles.resultRowSaved]}
+                onPress={() => pickPlace(item)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.resultName, { flex: 1 }]}>{item.name}</Text>
+                  {item.already_saved && (
+                    <View style={styles.savedBadge}><Text style={styles.savedBadgeText}>In your list</Text></View>
+                  )}
+                </View>
+                <Text style={styles.resultMeta}>{item.address || item.category || item.cuisine || ''}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -775,6 +798,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderRadius: 10, borderWidth: 0.5,
     borderColor: COLORS.border, padding: 14, marginBottom: 8,
   },
+  // Already-saved places: S-tier cream tint + gold outline (locked tokens) —
+  // identical to Add a Place / Check In.
+  resultRowSaved: { backgroundColor: COLORS.goldLight, borderWidth: 1, borderColor: COLORS.gold },
+  savedBadge: {
+    backgroundColor: COLORS.gold, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8, flexShrink: 0,
+  },
+  savedBadgeText: { fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#fff' },
   resultName: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text },
   resultMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
 

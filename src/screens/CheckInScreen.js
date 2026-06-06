@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import { api } from '../api/client';
 import { COLORS } from '../constants/colors';
+import { fetchBlendedPlaces } from '../utils/placeSearch';
 
 export default function CheckInScreen({ navigation }) {
   const [step, setStep] = useState('loading');
@@ -56,7 +57,10 @@ export default function CheckInScreen({ navigation }) {
     if (q.trim().length < 2) return;
     setSearchLoading(true);
     try {
-      const data = await api.json(`/api/places/google-autocomplete?q=${encodeURIComponent(q)}`);
+      // Blended: your saved matches on top (highlighted), Google results below,
+      // de-duped by google_place_id. Check-in needs a google_place_id, so only
+      // surface saved matches that have one. DB-only — no extra Google call.
+      const data = await fetchBlendedPlaces(q, { savedNeedsGpid: true });
       setSearchResults(data);
     } catch {
       setSearchResults([]);
