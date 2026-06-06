@@ -20,11 +20,16 @@ function formatPrice(price_level) {
 }
 
 function openMaps(place) {
-  const q = (place.lat != null && place.lng != null)
-    ? `${place.lat},${place.lng}`
-    : [place.display_name, place.address].filter(Boolean).join(' ');
-  if (!q) return;
-  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  // Prefer the server-built maps_url (opens the real listing via google_place_id —
+  // shared helper, web + app can't diverge). Fall back to a coordinate/name query.
+  let url = place.maps_url;
+  if (!url) {
+    const q = (place.lat != null && place.lng != null)
+      ? `${place.lat},${place.lng}`
+      : [place.display_name, place.address].filter(Boolean).join(' ');
+    if (!q) return;
+    url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  }
   Linking.openURL(url).catch(() => {});
 }
 
@@ -94,7 +99,7 @@ export default function PlaceCardModal({ place, visible, onClose }) {
                   <Text style={styles.actionText}>Reserve</Text>
                 </TouchableOpacity>
               ) : null}
-              {(place.lat != null || place.address) ? (
+              {(place.maps_url || place.lat != null || place.address) ? (
                 <TouchableOpacity style={styles.actionBtn} onPress={() => openMaps(place)}>
                   <Ionicons name="map-outline" size={18} color={COLORS.tierSText} />
                   <Text style={styles.actionText}>Open in Maps</Text>

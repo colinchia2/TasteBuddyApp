@@ -108,6 +108,13 @@ Gold: #C8960C
 - `keyboardShouldPersistTaps="handled"` on any ScrollView/FlatList that contains buttons near a TextInput
 - All API errors returning HTML (`<`) mean a missing DB table on PythonAnywhere — run `python _dev_scripts/create_missing_tables.py` on PA
 
+## My Places fix pass — 4 on-device issues (2026-06-06)
+- `MyPlacesScreen.js` — now single-column tiles from `GET /api/places/categories-summary`: primary (Breakfast/Lunch/Dinner by display_order) first, a divider, then user-added alphabetical, then Other. Each tile shows all 6 tier-count pips (zeros dimmed) + total — same numbers as the site (shared `build_category_summaries`).
+- `RankingsScreen.js` — filter UI reworked: the broken horizontal chip ScrollViews (clipped/expanding bars) replaced with a flex-wrap row of filter trigger pills → each opens a searchable **type-and-select** modal. Filters: tier, cuisine, city, neighborhood, country, state (state shown only if any place has one; geo/cuisine shown only when >1 distinct value). Vocabularies derived client-side from the loaded places; all filtering client-side across all 6 tiers. State shows the raw 2-letter code (web shows full name — minor).
+- `src/components/FilterSelectModal.js` — NEW searchable picker (type to filter, tap to select, "All X" clears). Mirrors the site's select2 behaviour.
+- Keyboard fix: all new search/filter `TextInput`s use the canonical good config (`autoCorrect`/`spellCheck`/`autoCapitalize`/`keyboardType="default"`) — same as the HomeScreen chat input. The bug was `autoCorrect={false}` killing the iOS predictive bar.
+- `PlaceCardModal.js` — "Open in Maps" now uses the server's `maps_url` (place-id listing via the shared helper), lat/lng fallback retained.
+
 ## My Places — read-only browse (2026-06-06)
 - New entry point on `HomeScreen` home: a wide "My Places" tile below the Log a Visit / Add a Place action tiles (white card, gold list icon, `browseTile` styles) → navigates to `MyPlaces`.
 - `App.js` — registered `MyPlaces` (Categories) and `Rankings` screens.
