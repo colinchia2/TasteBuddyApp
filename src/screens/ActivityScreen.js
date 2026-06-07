@@ -47,6 +47,21 @@ const TYPE_LABELS = {
   pending_checkin: 'Checked in',
 };
 
+// Top filter — mirrors web Activity's chips (All / Visits / New Places). Filters
+// the loaded feed client-side by the item `type` the endpoint already returns.
+const FEED_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'visit', label: 'Visits' },
+  { key: 'new_place', label: 'New Places' },
+];
+
+// Per-type pill colors — match web's calendar-dot semantics: visit = gold,
+// new_place = category-pill blue (#85B7EB/#042C53). No borders (locked rule).
+const TYPE_PILL = {
+  visit: { bg: COLORS.goldLight, fg: COLORS.gold },
+  new_place: { bg: COLORS.pillCatBg, fg: COLORS.pillCatText },
+};
+
 function deleteEndpoint(item) {
   if (item.type === 'visit')           return `/api/visits/${item.visit_id}/mobile`;
   if (item.type === 'new_place')       return `/api/places/user-place/${item.user_place_id}/mobile`;
@@ -102,6 +117,7 @@ export default function ActivityScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [feedFilter, setFeedFilter] = useState('all');   // all | visit | new_place
 
   async function load(p = 1) {
     if (p === 1) setError(null);
@@ -132,6 +148,13 @@ export default function ActivityScreen({ navigation }) {
   function loadMore() {
     if (page < totalPages) load(page + 1);
   }
+
+  // Client-side filter on the type the feed already returns. 'all' keeps
+  // everything (incl. pending check-ins, which are neither a visit nor a place-add
+  // and so only appear under All).
+  const visibleItems = feedFilter === 'all'
+    ? items
+    : items.filter(i => i.type === feedFilter);
 
   async function handleDelete(item) {
     const endpoint = deleteEndpoint(item);
@@ -193,22 +216,43 @@ export default function ActivityScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       <FlatList
         style={styles.container}
-        data={items}
+        data={visibleItems}
         keyExtractor={(item, i) => `${item.type}-${item.place_id}-${i}`}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.gold} />}
         onEndReached={loadMore}
         onEndReachedThreshold={0.3}
         ListHeaderComponent={() => (
-          <View style={styles.headerRow}>
-            <Text style={styles.header}>Activity</Text>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
-              <Ionicons name="close" size={22} color={COLORS.textMuted} />
-            </TouchableOpacity>
+          <View>
+            <View style={styles.headerRow}>
+              <Text style={styles.header}>Activity</Text>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+                <Ionicons name="close" size={22} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.filterRow}>
+              {FEED_FILTERS.map(f => {
+                const active = feedFilter === f.key;
+                return (
+                  <TouchableOpacity
+                    key={f.key}
+                    style={[styles.filterPill, active && styles.filterPillActive]}
+                    onPress={() => setFeedFilter(f.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>{f.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         )}
         ListEmptyComponent={() => (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No activity yet.</Text>
+            <Text style={styles.emptyText}>
+              {feedFilter === 'all' ? 'No activity yet.'
+                : feedFilter === 'visit' ? 'No visits yet.'
+                : 'No new Places yet.'}
+            </Text>
           </View>
         )}
         renderItem={({ item }) => {
@@ -238,11 +282,16 @@ export default function ActivityScreen({ navigation }) {
           return (
             <SwipeableCard item={item} onDelete={() => handleDelete(item)}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.action}>
-                  <Text style={styles.actionType}>{TYPE_LABELS[item.type] || item.type}</Text>
-                  {' · '}
-                  <Text style={styles.placeName}>{item.name}</Text>
-                </Text>
+                <View style={styles.actionRow}>
+                  {TYPE_PILL[item.type] && (
+                    <View style={[styles.typePill, { backgroundColor: TYPE_PILL[item.type].bg }]}>
+                      <Text style={[styles.typePillText, { color: TYPE_PILL[item.type].fg }]}>
+                        {TYPE_LABELS[item.type] || item.type}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.placeName} numberOfLines={1}>{item.name}</Text>
+                </View>
                 <Text style={styles.meta}>
                   {[item.category, item.occasion, formatDate(item.date)].filter(Boolean).join(' · ')}
                 </Text>
@@ -274,6 +323,22 @@ const styles = StyleSheet.create({
   },
   header: { fontSize: 22, fontWeight: '800', color: COLORS.text },
   closeBtn: { padding: 4 },
+
+  // Top filter segment (All / Visits / New Places). Filled-active, light-inactive,
+  // no borders (locked rule) — reads as a segmented control.
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 14 },
+  filterPill: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18,
+    backgroundColor: COLORS.borderLight,
+  },
+  filterPillActive: { backgroundColor: COLORS.text },
+  filterPillText: { fontSize: 13, fontWeight: '700', color: COLORS.textMuted },
+  filterPillTextActive: { color: COLORS.white },
+
+  // Per-item type pill — makes visit vs new-place obvious even on the All tab.
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  typePill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 12 },
+  typePillText: { fontSize: 11, fontWeight: '700' },
   card: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white,
     marginHorizontal: 16, marginBottom: 8, borderRadius: 12,
@@ -282,7 +347,7 @@ const styles = StyleSheet.create({
   cardRight: { alignItems: 'flex-end', gap: 6 },
   action: { fontSize: 14, color: COLORS.text },
   actionType: { fontWeight: '500', color: COLORS.textMuted },
-  placeName: { fontWeight: '700' },
+  placeName: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
   meta: { fontSize: 12, color: COLORS.textMuted, marginTop: 3 },
   emptyState: { paddingTop: 60, alignItems: 'center' },
   emptyText: { color: COLORS.textMuted, fontSize: 14 },
