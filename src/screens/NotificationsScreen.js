@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenHeader from '../components/ScreenHeader';
@@ -63,6 +64,43 @@ export default function NotificationsScreen({ navigation }) {
     } catch {}
   }
 
+  // Hard-delete one (swipe → red X). Optimistic remove, revert on failure.
+  async function deleteOne(id) {
+    const prev = notifications;
+    setNotifications(p => p.filter(n => n.id !== id));
+    try {
+      await api.json(`/api/notifications/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      setNotifications(prev);
+      Alert.alert('Error', 'Could not delete that notification. Please try again.');
+    }
+  }
+
+  // Hard-delete all (confirm first — destructive).
+  function clearAll() {
+    if (notifications.length === 0) return;
+    Alert.alert(
+      'Clear all notifications?',
+      'This permanently removes all your notifications.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear all', style: 'destructive',
+          onPress: async () => {
+            const prev = notifications;
+            setNotifications([]);
+            try {
+              await api.json('/api/notifications/clear-all', { method: 'DELETE' });
+            } catch (e) {
+              setNotifications(prev);
+              Alert.alert('Error', 'Could not clear notifications. Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   function renderItem({ item }) {
@@ -73,22 +111,36 @@ export default function NotificationsScreen({ navigation }) {
       ? { activeOpacity: 0.75, onPress: () => handleNotificationTap(item, navigation) }
       : {};
     return (
-      <RowWrapper style={[styles.row, !item.is_read && styles.rowUnread]} {...wrapperProps}>
-        <View style={styles.iconWrap}>
-          <Ionicons name={iconName} size={18} color={COLORS.gold} />
-        </View>
-        <View style={styles.rowContent}>
-          {item.title ? <Text style={styles.rowTitle}>{item.title}</Text> : null}
-          {item.body ? <Text style={styles.rowBody}>{item.body}</Text> : null}
-          <View style={styles.rowFooter}>
-            <Text style={styles.rowTime}>{timeAgo(item.created_at)}</Text>
-            {tappable && (
-              <Text style={styles.rowAction}>Finish logging visit →</Text>
-            )}
+      <Swipeable
+        renderRightActions={() => (
+          <TouchableOpacity
+            style={styles.deleteAction}
+            onPress={() => deleteOne(item.id)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="close" size={20} color={COLORS.tierNextUpText} />
+          </TouchableOpacity>
+        )}
+        rightThreshold={40}
+        overshootRight={false}
+      >
+        <RowWrapper style={[styles.row, !item.is_read && styles.rowUnread]} {...wrapperProps}>
+          <View style={styles.iconWrap}>
+            <Ionicons name={iconName} size={18} color={COLORS.gold} />
           </View>
-        </View>
-        {!item.is_read && <View style={styles.unreadDot} />}
-      </RowWrapper>
+          <View style={styles.rowContent}>
+            {item.title ? <Text style={styles.rowTitle}>{item.title}</Text> : null}
+            {item.body ? <Text style={styles.rowBody}>{item.body}</Text> : null}
+            <View style={styles.rowFooter}>
+              <Text style={styles.rowTime}>{timeAgo(item.created_at)}</Text>
+              {tappable && (
+                <Text style={styles.rowAction}>Finish logging visit →</Text>
+              )}
+            </View>
+          </View>
+          {!item.is_read && <View style={styles.unreadDot} />}
+        </RowWrapper>
+      </Swipeable>
     );
   }
 
@@ -98,10 +150,17 @@ export default function NotificationsScreen({ navigation }) {
         title="Notifications"
         navigation={navigation}
         rightElement={
-          unreadCount > 0 ? (
-            <TouchableOpacity onPress={markAllRead} style={styles.markReadBtn}>
-              <Text style={styles.markReadText}>Mark all read</Text>
-            </TouchableOpacity>
+          notifications.length > 0 ? (
+            <View style={styles.headerActions}>
+              {unreadCount > 0 && (
+                <TouchableOpacity onPress={markAllRead} style={styles.markReadBtn}>
+                  <Text style={styles.markReadText}>Mark all read</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={clearAll} style={styles.markReadBtn}>
+                <Text style={styles.clearAllText}>Clear all</Text>
+              </TouchableOpacity>
+            </View>
           ) : null
         }
       />
@@ -144,8 +203,15 @@ const styles = StyleSheet.create({
   retryText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: '#fff' },
   emptyTitle: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.text, marginTop: 16 },
   emptySub: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted, marginTop: 6, textAlign: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   markReadBtn: { paddingVertical: 4, paddingHorizontal: 8 },
   markReadText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.gold },
+  clearAllText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.tierNextUpText },
+  // Swipe-left reveal: red X on the Next Up token (#FCEBEB / #791F1F), no border.
+  deleteAction: {
+    backgroundColor: COLORS.tierNextUp, width: 64,
+    alignItems: 'center', justifyContent: 'center',
+  },
   row: {
     flexDirection: 'row', alignItems: 'flex-start',
     paddingHorizontal: 16, paddingVertical: 14,

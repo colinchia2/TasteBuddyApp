@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Platform,
   ActivityIndicator, Keyboard, Animated, PanResponder, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
@@ -101,6 +102,7 @@ export default function HomeScreen({ navigation, route }) {
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
+  const [unreadNotifs, setUnreadNotifs] = useState(0);   // bell badge — same count as web
   const scrollRef = useRef(null);
   const chatInputRef = useRef(null);
   const phaseTimerRef = useRef(null);
@@ -116,6 +118,16 @@ export default function HomeScreen({ navigation, route }) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages, chatActive]);
+
+  // Bell badge: refetch the unread count whenever Home regains focus — so it
+  // reflects deletes / clear-all / mark-all-read done on the Notifications screen
+  // (web recomputes per page load; this is the app equivalent). Same DB count
+  // (is_read=False) the web nav badge uses.
+  useFocusEffect(useCallback(() => {
+    api.json('/api/notifications/unread-count')
+      .then(d => setUnreadNotifs(d?.count || 0))
+      .catch(() => {});
+  }, []));
 
   // Handle continuing a session from ChatHistoryScreen
   useEffect(() => {
@@ -438,6 +450,11 @@ export default function HomeScreen({ navigation, route }) {
               onPress={() => navigation.navigate('Notifications')}
             >
               <Ionicons name="notifications-outline" size={24} color={COLORS.text} />
+              {unreadNotifs > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{unreadNotifs > 99 ? '99+' : unreadNotifs}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.avatar}
@@ -677,6 +694,13 @@ const styles = StyleSheet.create({
   greetingChat: { fontSize: 16 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   iconBtn: { padding: 3 },
+  // Unread bell badge — matches web (#E24B4A / white, no border).
+  bellBadge: {
+    position: 'absolute', top: -2, right: -2,
+    minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4,
+    backgroundColor: COLORS.danger, alignItems: 'center', justifyContent: 'center',
+  },
+  bellBadgeText: { fontFamily: 'DMSans_700Bold', fontSize: 9, color: COLORS.white },
   avatar: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.gold,
     alignItems: 'center', justifyContent: 'center',
