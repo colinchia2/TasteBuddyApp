@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Platform,
-  ActivityIndicator, Keyboard, Animated, Alert, PanResponder,
+  ActivityIndicator, Keyboard, Animated, PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -91,16 +91,6 @@ const LOADING_PHASES = [
 ];
 const LOADING_PHASE_FINAL = 'Putting the Cherry on Top…';
 
-function fmtRecentDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const days = Math.floor((new Date() - d) / 86400000);
-  if (days <= 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 export default function HomeScreen({ navigation, route }) {
   const { user } = useAuth();
   const [chatActive, setChatActive] = useState(false);
@@ -111,7 +101,6 @@ export default function HomeScreen({ navigation, route }) {
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
-  const [recentSessions, setRecentSessions] = useState([]);
   const scrollRef = useRef(null);
   const chatInputRef = useRef(null);
   const phaseTimerRef = useRef(null);
@@ -144,56 +133,6 @@ export default function HomeScreen({ navigation, route }) {
     setCompletedActions(prev => ({ ...prev, [cardId]: true }));
     navigation.setParams({ actionCompleted: undefined });
   }, [route?.params?.actionCompleted]);
-
-  function loadRecentSessions() {
-    api.json('/api/chat/sessions')
-      .then(data => setRecentSessions((data || []).slice(0, 8)))
-      .catch(() => {});
-  }
-  useEffect(() => { loadRecentSessions(); }, []);
-
-  // Long-press a recent chat → rename or delete. Delete removes it from the
-  // shared DB, so it's gone from history on web AND app.
-  function recentChatActions(session) {
-    Alert.alert(session.title || 'Chat', undefined, [
-      { text: 'Rename', onPress: () => renameRecentChat(session) },
-      { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteRecentChat(session) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  }
-  function renameRecentChat(session) {
-    Alert.prompt(
-      'Rename chat',
-      'Enter a new name for this conversation.',
-      async (newTitle) => {
-        const t = (newTitle || '').trim();
-        if (!t) return;
-        try {
-          await api.json(`/api/chat/sessions/${session.id}/rename`, {
-            method: 'POST', body: JSON.stringify({ title: t }),
-          });
-          setRecentSessions(prev => prev.map(s => (s.id === session.id ? { ...s, title: t } : s)));
-        } catch (_) {}
-      },
-      'plain-text',
-      session.title || '',
-    );
-  }
-  function confirmDeleteRecentChat(session) {
-    Alert.alert('Delete chat?', 'This removes it from your history everywhere.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.json(`/api/chat/sessions/${session.id}`, { method: 'DELETE' });
-            setRecentSessions(prev => prev.filter(s => s.id !== session.id));
-            if (conversationId === session.id) resetChat();
-          } catch (_) {}
-        },
-      },
-    ]);
-  }
 
   async function loadSession(session) {
     try {
@@ -426,7 +365,6 @@ export default function HomeScreen({ navigation, route }) {
     setConversationId(null);
     setInputText('');
     setLoadingPhase(LOADING_PHASES[0]);
-    loadRecentSessions();   // refresh recent-chats list after a conversation
   }
 
   // ── Keyboard-aware composer offset ──────────────────────────────────────
@@ -672,31 +610,20 @@ export default function HomeScreen({ navigation, route }) {
           </ScrollView>
         )}
 
-        {/* Recent chats fill the space above the composer (and pin it to the
-            bottom). During an active conversation the chat ScrollView plays that
-            role instead. Falls back to an empty spacer when there are no chats. */}
+        {/* Single, unobtrusive entry to the full chat-history screen. The flex
+            spacer fills the area above the composer so the input stays pinned to
+            the bottom (the chat ScrollView plays that role during a conversation). */}
         {!chatActive && (
-          recentSessions.length > 0 ? (
-            <View style={styles.recentWrap}>
-              <View style={styles.recentHeader}>
-                <Text style={styles.recentLabel}>Recent chats</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('ChatHistory')}>
-                  <Text style={styles.recentSeeAll}>See all</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recentList} keyboardShouldPersistTaps="handled">
-                {recentSessions.map(s => (
-                  <TouchableOpacity key={s.id} style={styles.recentRow} onPress={() => loadSession(s)} onLongPress={() => recentChatActions(s)} delayLongPress={300} activeOpacity={0.75}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.gold} style={{ marginRight: 10 }} />
-                    <Text style={styles.recentTitle} numberOfLines={1}>{s.title || 'Untitled chat'}</Text>
-                    <Text style={styles.recentDate}>{fmtRecentDate(s.updated_at)}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          ) : (
-            <View style={{ flex: 1 }} />
-          )
+          <View style={styles.historyWrap}>
+            <TouchableOpacity
+              style={styles.historyBtn}
+              onPress={() => navigation.navigate('ChatHistory')}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="time-outline" size={15} color={COLORS.textMuted} style={{ marginRight: 6 }} />
+              <Text style={styles.historyBtnText}>Chat History</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Input bar — paddingBottom is keyboard-driven (endCoordinates), and
@@ -839,21 +766,12 @@ const styles = StyleSheet.create({
   },
   suggestText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.text, lineHeight: 16 },
 
-  recentWrap: { flex: 1, paddingHorizontal: 16, paddingTop: 6 },
-  recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  recentLabel: {
-    fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+  historyWrap: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+  historyBtn: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    paddingVertical: 8,
   },
-  recentSeeAll: { fontFamily: 'DMSans_700Bold', fontSize: 12, color: COLORS.gold },
-  recentList: { paddingBottom: 8 },
-  recentRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border,
-    paddingHorizontal: 12, paddingVertical: 11, marginBottom: 8,
-  },
-  recentTitle: { flex: 1, fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.text, marginRight: 8 },
-  recentDate: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight },
+  historyBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.textMuted },
 
   inputSection: { paddingHorizontal: 16, paddingTop: 8 },  // paddingBottom is keyboard-driven (kbPad)
   newChatBtn: {

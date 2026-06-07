@@ -4,6 +4,12 @@
     "slug": "tastebuddy",
     "scheme": "tastebuddy",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4985fd09-2f5b-4222-b5dd-7577f18e8925"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
