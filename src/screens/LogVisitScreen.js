@@ -134,6 +134,12 @@ export default function LogVisitScreen({ navigation, route }) {
   const [addCatSelected, setAddCatSelected] = useState(null); // { id, name }
   const [addCatCustom, setAddCatCustom] = useState('');
   const [addCatCuisine, setAddCatCuisine] = useState('');
+  // Existing cuisines for the add-category autofill dropdown (bare string array
+  // from GET /api/places/cuisines) — mirrors AddPlaceScreen so picking reuses the
+  // exact existing string (no "American"/"american" duplicates).
+  const [allCuisines, setAllCuisines] = useState([]);
+  const [addCatCuisineSugg, setAddCatCuisineSugg] = useState([]);
+  const [showAddCatCuisineDrop, setShowAddCatCuisineDrop] = useState(false);
   const [addCatTier, setAddCatTier] = useState('TBE');
   const [addCatSaving, setAddCatSaving] = useState(false);
   const [addCatSuccessMsg, setAddCatSuccessMsg] = useState('');
@@ -194,6 +200,35 @@ export default function LogVisitScreen({ navigation, route }) {
     }
   }
 
+  // Cuisine autofill for the add-category form. Response is a BARE string array
+  // (["American","Italian",…]); items are strings — same contract as AddPlaceScreen.
+  async function loadCuisines() {
+    try {
+      const data = await api.json('/api/places/cuisines');
+      setAllCuisines(Array.isArray(data) ? data : []);
+    } catch {
+      setAllCuisines([]);
+    }
+  }
+
+  function onAddCatCuisineChange(text) {
+    setAddCatCuisine(text);
+    if (text.trim().length === 0) {
+      setAddCatCuisineSugg(allCuisines);
+      setShowAddCatCuisineDrop(allCuisines.length > 0);
+    } else {
+      const filtered = allCuisines.filter(c => c.toLowerCase().startsWith(text.toLowerCase()));
+      setAddCatCuisineSugg(filtered);
+      setShowAddCatCuisineDrop(filtered.length > 0);
+    }
+  }
+
+  function selectAddCatCuisine(c) {
+    setAddCatCuisine(c);
+    setShowAddCatCuisineDrop(false);
+    setAddCatCuisineSugg([]);
+  }
+
   async function submitAddCategory() {
     if (!addCatSelected && !addCatCustom.trim()) {
       Alert.alert('Select or type a category name'); return;
@@ -227,6 +262,8 @@ export default function LogVisitScreen({ navigation, route }) {
       setAddCatSelected(null);
       setAddCatCustom('');
       setAddCatCuisine('');
+      setShowAddCatCuisineDrop(false);
+      setAddCatCuisineSugg([]);
       setAddCatTier('TBE');
       // FIX 4: Show success toast
       setAddCatSuccessMsg(`✓ ${finalName} added and selected!`);
@@ -542,13 +579,46 @@ export default function LogVisitScreen({ navigation, route }) {
                   placeholderTextColor={COLORS.textLight}
                 />
 
-                <TextInput
-                  style={styles.addCatInput}
-                  value={addCatCuisine}
-                  onChangeText={setAddCatCuisine}
-                  placeholder="Cuisine (e.g. Italian)"
-                  placeholderTextColor={COLORS.textLight}
-                />
+                <View>
+                  <View style={styles.addCatCuisineRow}>
+                    <TextInput
+                      style={[styles.addCatInput, { marginBottom: 0, flex: 1 }]}
+                      value={addCatCuisine}
+                      onChangeText={onAddCatCuisineChange}
+                      onFocus={() => {
+                        setAddCatCuisineSugg(addCatCuisine.trim() ? addCatCuisineSugg : allCuisines);
+                        setShowAddCatCuisineDrop(allCuisines.length > 0);
+                      }}
+                      onBlur={() => setTimeout(() => setShowAddCatCuisineDrop(false), 150)}
+                      placeholder="Cuisine (e.g. Italian)"
+                      placeholderTextColor={COLORS.textLight}
+                      autoCorrect={false}
+                      returnKeyType="done"
+                    />
+                    {addCatCuisine.trim().length > 0 && (
+                      <TouchableOpacity
+                        onPress={() => { setAddCatCuisine(''); setShowAddCatCuisineDrop(false); }}
+                        style={styles.addCatCuisineClear}
+                      >
+                        <Ionicons name="close-circle" size={18} color={COLORS.textLight} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {showAddCatCuisineDrop && addCatCuisineSugg.length > 0 && (
+                    <View style={styles.addCatCuisineDrop}>
+                      {addCatCuisineSugg.map(c => (
+                        <TouchableOpacity
+                          key={c}
+                          style={styles.addCatCuisineDropItem}
+                          onPress={() => selectAddCatCuisine(c)}
+                        >
+                          <Text style={styles.addCatCuisineDropText}>{c}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+                <View style={{ height: 8 }} />
 
                 <View style={styles.addCatTierRow}>
                   {Object.entries(TIER_COLORS).map(([t, tc]) => (
@@ -582,7 +652,7 @@ export default function LogVisitScreen({ navigation, route }) {
             ) : (
               <TouchableOpacity
                 style={styles.addCatBtn}
-                onPress={() => { setShowAddCat(true); loadAllCategories(); }}
+                onPress={() => { setShowAddCat(true); loadAllCategories(); loadCuisines(); }}
               >
                 <Text style={styles.addCatBtnText}>+ Add category</Text>
               </TouchableOpacity>
@@ -941,6 +1011,19 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border, paddingHorizontal: 12, paddingVertical: 10,
     fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, marginBottom: 8,
   },
+  // Cuisine autofill dropdown — mirrors AddPlaceScreen's dropdown so the two
+  // cuisine inputs feel identical.
+  addCatCuisineRow: { flexDirection: 'row', alignItems: 'center' },
+  addCatCuisineClear: { position: 'absolute', right: 12 },
+  addCatCuisineDrop: {
+    backgroundColor: '#fff', borderRadius: 10, borderWidth: 0.5,
+    borderColor: COLORS.border, marginTop: 4, overflow: 'hidden',
+  },
+  addCatCuisineDropItem: {
+    paddingHorizontal: 14, paddingVertical: 11,
+    borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
+  },
+  addCatCuisineDropText: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text },
   addCatTierRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   addCatTierChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 2, borderColor: 'transparent' },
   addCatTierText: { fontFamily: 'DMSans_700Bold', fontSize: 12 },
