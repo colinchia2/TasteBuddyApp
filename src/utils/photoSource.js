@@ -4,6 +4,18 @@
 import { Platform, ActionSheetIOS, Alert, Linking } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
 
+// Build an uploadable multipart filename with an extension the server accepts.
+// expo-image-picker (especially multi-select) can hand back a uri with no/odd
+// extension; /api/photos/upload rejects names whose extension isn't allowed
+// ("File type not allowed"). The backend re-encodes to JPEG via Pillow regardless
+// of the name (it detects the real format from bytes), so forcing .jpg is safe.
+const _UPLOAD_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'];
+export function safePhotoName(uri) {
+  const last = (String(uri || '').split('/').pop() || '').split('?')[0].split('#')[0];
+  const ext = last.includes('.') ? last.split('.').pop().toLowerCase() : '';
+  return _UPLOAD_EXTS.includes(ext) ? last : 'photo.jpg';
+}
+
 // Options sheet with "Last photo taken" as the top option.
 export function presentPhotoSource({ onLast, onLibrary }) {
   if (Platform.OS === 'ios' && ActionSheetIOS) {

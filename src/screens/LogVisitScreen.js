@@ -9,7 +9,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import ScreenHeader from '../components/ScreenHeader';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
-import { presentPhotoSource, pickLastPhoto } from '../utils/photoSource';
+import { presentPhotoSource, pickLastPhoto, safePhotoName } from '../utils/photoSource';
 import { fetchBlendedPlaces } from '../utils/placeSearch';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -401,7 +401,7 @@ export default function LogVisitScreen({ navigation, route }) {
     for (const photo of photos) {
       try {
         const formData = new FormData();
-        const filename = photo.uri.split('/').pop();
+        const filename = safePhotoName(photo.uri);
         formData.append('file', { uri: photo.uri, name: filename, type: 'image/jpeg' });
         formData.append('place_id', String(pid));
         formData.append('visit_id', String(visitId));
