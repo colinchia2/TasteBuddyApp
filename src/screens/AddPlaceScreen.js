@@ -152,6 +152,7 @@ export default function AddPlaceScreen({ navigation, route }) {
   const [showAllCats, setShowAllCats] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [showNewCatInput, setShowNewCatInput] = useState(false); // collapsed "create new" link
   const [cuisine, setCuisine] = useState('');
   const [cuisineSuggestions, setCuisineSuggestions] = useState([]);
   // Location-confirm fallback (shown only when the server flags it uncertain)
@@ -567,7 +568,7 @@ export default function AddPlaceScreen({ navigation, route }) {
           </View>
 
           {/* Category */}
-          <Text style={styles.sectionLabel}>Category</Text>
+          <Text style={styles.sectionLabel}>1. Select a Category</Text>
           <View style={styles.chipRow}>
             {visibleCats.map(cat => (
               <TouchableOpacity
@@ -586,26 +587,33 @@ export default function AddPlaceScreen({ navigation, route }) {
               <Text style={styles.showMoreText}>Show more ({extraCats.length})</Text>
             </TouchableOpacity>
           )}
-          <View style={styles.newCatRow}>
-            <TextInput
-              style={styles.newCatInput}
-              placeholder="+ Create new category"
-              placeholderTextColor={COLORS.textLight}
-              value={newCategoryName}
-              onChangeText={setNewCategoryName}
-              onSubmitEditing={createNewCategory}
-              returnKeyType="done"
-              blurOnSubmit={false}
-            />
-            {newCategoryName.trim().length > 0 && (
-              <TouchableOpacity style={styles.newCatBtn} onPress={createNewCategory}>
-                <Text style={styles.newCatBtnText}>Add</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {showNewCatInput ? (
+            <View style={styles.newCatRow}>
+              <TextInput
+                style={styles.newCatInput}
+                placeholder="New category name…"
+                placeholderTextColor={COLORS.textLight}
+                value={newCategoryName}
+                onChangeText={setNewCategoryName}
+                onSubmitEditing={createNewCategory}
+                returnKeyType="done"
+                blurOnSubmit={false}
+                autoFocus
+              />
+              {newCategoryName.trim().length > 0 && (
+                <TouchableOpacity style={styles.newCatBtn} onPress={createNewCategory}>
+                  <Text style={styles.newCatBtnText}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <TouchableOpacity onPress={() => { setShowNewCatInput(true); setSelectedCategory(null); }} style={styles.newCatLink}>
+              <Text style={styles.newCatLinkText}>or create a new category</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Cuisine */}
-          <Text style={styles.sectionLabel}>Cuisine <Text style={styles.required}>*</Text></Text>
+          <Text style={styles.sectionLabel}>2. Select a Cuisine <Text style={styles.required}>*</Text></Text>
           <View>
             <View style={styles.cuisineInputRow}>
               <TextInput
@@ -768,6 +776,9 @@ const styles = StyleSheet.create({
   chipTextActive: { color: COLORS.gold, fontFamily: 'DMSans_700Bold' },
   showMoreBtn: { marginBottom: 10 },
   showMoreText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.gold },
+  // Collapsed "or create a new category" — subtle brand-gold link.
+  newCatLink: { alignSelf: 'flex-start', paddingVertical: 6, marginBottom: 8 },
+  newCatLinkText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.gold },
   newCatRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   newCatInput: {
     flex: 1, backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 0.5,

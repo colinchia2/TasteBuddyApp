@@ -126,14 +126,15 @@ export default function CheckInScreen({ navigation }) {
         checkinId: checkedIn.checkin_id,
       });
     } else {
-      navigation.replace('AddPlace', {
-        googlePlaceId: checkedIn.google_place_id,
+      // New place (orphan — gps_checkin already created+resolved the place row, no
+      // user_places yet). Go straight to Log a Visit; its new-place gate intercepts
+      // and runs the add-categories step (supports MULTIPLE) before logging. The old
+      // AddPlace detour only added a single category and re-resolved an already-
+      // resolved place, so nothing is lost.
+      navigation.replace('LogVisit', {
+        placeId: checkedIn.place_id,
         placeName: checkedIn.name,
-        onDone: () => navigation.replace('LogVisit', {
-          placeId: checkedIn.place_id,
-          placeName: checkedIn.name,
-          checkinId: checkedIn.checkin_id,
-        }),
+        checkinId: checkedIn.checkin_id,
       });
     }
   }

@@ -7,6 +7,7 @@ export default function AddCategoryActionCard({ data }) {
   const [showMore, setShowMore] = useState(false);
   const [selectedCatId, setSelectedCatId] = useState(null);
   const [customCatName, setCustomCatName] = useState('');
+  const [showNewCatInput, setShowNewCatInput] = useState(false); // collapsed "create new" link
   const [cuisineQuery, setCuisineQuery] = useState(data.suggested_cuisine || '');
   const [allCuisines, setAllCuisines] = useState([]);
   const [cuisineMatches, setCuisineMatches] = useState([]);
@@ -32,7 +33,7 @@ export default function AddCategoryActionCard({ data }) {
       if (suggestedCat) {
         const match = catList.find(c => c.name.toLowerCase() === suggestedCat.toLowerCase());
         if (match) setSelectedCatId(match.id);
-        else setCustomCatName(suggestedCat);
+        else { setCustomCatName(suggestedCat); setShowNewCatInput(true); }
       }
     } catch (_) {}
   }
@@ -58,6 +59,7 @@ export default function AddCategoryActionCard({ data }) {
     } else {
       setSelectedCatId(id);
       setCustomCatName('');
+      setShowNewCatInput(false);
     }
   }
 
@@ -127,7 +129,7 @@ export default function AddCategoryActionCard({ data }) {
       <Text style={styles.cardHeader}>Add Category</Text>
       {placeName ? <Text style={styles.cardPlace}>{placeName}</Text> : null}
 
-      <Text style={styles.fieldLabel}>Category</Text>
+      <Text style={styles.fieldLabel}>1. Select a Category</Text>
 
       {primaryCats.length > 0 && (
         <View style={styles.pillRow}>
@@ -168,15 +170,22 @@ export default function AddCategoryActionCard({ data }) {
         </>
       )}
 
-      <TextInput
-        style={[styles.input, { marginTop: 8 }]}
-        value={customCatName}
-        onChangeText={text => { setCustomCatName(text); if (text) setSelectedCatId(null); }}
-        placeholder="Or type a new category…"
-        placeholderTextColor="#bbb"
-      />
+      {showNewCatInput ? (
+        <TextInput
+          style={[styles.input, { marginTop: 8 }]}
+          value={customCatName}
+          onChangeText={text => { setCustomCatName(text); if (text) setSelectedCatId(null); }}
+          placeholder="New category name…"
+          placeholderTextColor="#bbb"
+          autoFocus
+        />
+      ) : (
+        <TouchableOpacity onPress={() => { setShowNewCatInput(true); setSelectedCatId(null); }} style={styles.newCatLink}>
+          <Text style={styles.newCatLinkText}>or create a new category</Text>
+        </TouchableOpacity>
+      )}
 
-      <Text style={styles.fieldLabel}>Cuisine (optional)</Text>
+      <Text style={styles.fieldLabel}>2. Select a Cuisine (optional)</Text>
       <TextInput
         style={styles.input}
         value={cuisineQuery}
@@ -254,6 +263,9 @@ const styles = StyleSheet.create({
   pillTextSelected: { fontFamily: 'DMSans_700Bold', color: '#633806' },
   moreCatsBtn: { paddingVertical: 3, marginBottom: 2, alignSelf: 'flex-start' },
   moreCatsText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: '#C8960C' },
+  // Collapsed "or create a new category" — subtle brand-gold link.
+  newCatLink: { alignSelf: 'flex-start', paddingVertical: 6, marginTop: 8 },
+  newCatLinkText: { fontFamily: 'DMSans_700Bold', fontSize: 12, color: '#C8960C' },
   input: {
     borderWidth: 0.5,
     borderColor: '#D97706',

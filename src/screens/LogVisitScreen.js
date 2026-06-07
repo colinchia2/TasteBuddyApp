@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image,
+  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image, Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -127,6 +127,8 @@ export default function LogVisitScreen({ navigation, route }) {
   const [catTiers, setCatTiers] = useState({}); // { user_place_id: tierStr }
   const origCatTiersRef = useRef({}); // original tiers at load time — used to guard pairwise
   const [loadingCats, setLoadingCats] = useState(false);
+  const [catsLoaded, setCatsLoaded] = useState(false);   // first categories fetch finished
+  const [gateProceeded, setGateProceeded] = useState(false); // user tapped "Add categories"
 
   // Add-category inline form
   const [showAddCat, setShowAddCat] = useState(false);
@@ -140,6 +142,7 @@ export default function LogVisitScreen({ navigation, route }) {
   const [allCuisines, setAllCuisines] = useState([]);
   const [addCatCuisineSugg, setAddCatCuisineSugg] = useState([]);
   const [showAddCatCuisineDrop, setShowAddCatCuisineDrop] = useState(false);
+  const [showNewCatInput, setShowNewCatInput] = useState(false); // collapsed "create new" link
   const [addCatTier, setAddCatTier] = useState('TBE');
   const [addCatSaving, setAddCatSaving] = useState(false);
   const [addCatSuccessMsg, setAddCatSuccessMsg] = useState('');
@@ -181,6 +184,7 @@ export default function LogVisitScreen({ navigation, route }) {
       setCategories([]);
     } finally {
       setLoadingCats(false);
+      setCatsLoaded(true);   // gate can now evaluate membership count
     }
   }
 
@@ -261,6 +265,7 @@ export default function LogVisitScreen({ navigation, route }) {
       await loadCategories(placeId); // closes form, auto-checks the new category
       setAddCatSelected(null);
       setAddCatCustom('');
+      setShowNewCatInput(false);
       setAddCatCuisine('');
       setShowAddCatCuisineDrop(false);
       setAddCatCuisineSugg([]);
@@ -509,10 +514,36 @@ export default function LogVisitScreen({ navigation, route }) {
   const activeCatCount = categories.filter(c => checkedCats[c.user_place_id]).length;
   const canSave = activeCatCount > 0 && !saving;
 
+  // New-place gate: this place has ZERO category memberships (an orphan — e.g. a
+  // GPS check-in not yet categorised). Intercept BEFORE the log form so the user
+  // adds at least one category first (logging an orphan 404s). Fires for every
+  // entry that lands here with a place_id (check-in continue, Activity "Finish
+  // logging", notification/deep-link). Clears itself once a category is added
+  // (loadCategories reload → categories.length > 0). No popup when memberships exist.
+  const showGate = !!placeId && catsLoaded && categories.length === 0 && !gateProceeded;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.container}>
         <ScreenHeader title="Log a Visit" navigation={navigation} />
+
+        <Modal visible={showGate} transparent animationType="fade" onRequestClose={() => navigation.goBack()}>
+          <View style={styles.gateBackdrop}>
+            <View style={styles.gateCard}>
+              <Text style={styles.gateTitle}>This is a new place — let's add the categories you want to track first</Text>
+              <TouchableOpacity
+                style={styles.gatePrimary}
+                onPress={() => { setGateProceeded(true); setShowAddCat(true); setShowNewCatInput(false); loadAllCategories(); loadCuisines(); }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.gatePrimaryText}>Add categories</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.gateCancel} onPress={() => navigation.goBack()} activeOpacity={0.75}>
+                <Text style={styles.gateCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
         <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
 
           {/* ── Place header ── */}
@@ -552,14 +583,14 @@ export default function LogVisitScreen({ navigation, route }) {
           {!loadingCats && (
             showAddCat ? (
               <View style={styles.addCatForm}>
-                <Text style={styles.addCatFormTitle}>Add a category</Text>
+                <Text style={styles.addCatFormTitle}>1. Select a Category</Text>
 
                 <View style={styles.addCatPillRow}>
                   {allCategories.map(cat => (
                     <TouchableOpacity
                       key={cat.id}
                       style={[styles.addCatPill, addCatSelected?.id === cat.id && styles.addCatPillSelected]}
-                      onPress={() => { setAddCatSelected(cat); setAddCatCustom(''); }}
+                      onPress={() => { setAddCatSelected(cat); setAddCatCustom(''); setShowNewCatInput(false); }}
                     >
                       <Text style={[styles.addCatPillText, addCatSelected?.id === cat.id && styles.addCatPillTextSelected]}>
                         {cat.name}
@@ -571,14 +602,23 @@ export default function LogVisitScreen({ navigation, route }) {
                   )}
                 </View>
 
-                <TextInput
-                  style={styles.addCatInput}
-                  value={addCatCustom}
-                  onChangeText={t => { setAddCatCustom(t); setAddCatSelected(null); }}
-                  placeholder="Or type a new category…"
-                  placeholderTextColor={COLORS.textLight}
-                />
+                {/* Collapsed "create new": subtle gold link reveals the input on tap. */}
+                {showNewCatInput ? (
+                  <TextInput
+                    style={styles.addCatInput}
+                    value={addCatCustom}
+                    onChangeText={t => { setAddCatCustom(t); setAddCatSelected(null); }}
+                    placeholder="New category name…"
+                    placeholderTextColor={COLORS.textLight}
+                    autoFocus
+                  />
+                ) : (
+                  <TouchableOpacity onPress={() => { setShowNewCatInput(true); setAddCatSelected(null); }} style={styles.newCatLink}>
+                    <Text style={styles.newCatLinkText}>or create a new category</Text>
+                  </TouchableOpacity>
+                )}
 
+                <Text style={styles.addCatStepLabel}>2. Select a Cuisine</Text>
                 <View>
                   <View style={styles.addCatCuisineRow}>
                     <TextInput
@@ -652,7 +692,7 @@ export default function LogVisitScreen({ navigation, route }) {
             ) : (
               <TouchableOpacity
                 style={styles.addCatBtn}
-                onPress={() => { setShowAddCat(true); loadAllCategories(); loadCuisines(); }}
+                onPress={() => { setShowAddCat(true); setShowNewCatInput(false); loadAllCategories(); loadCuisines(); }}
               >
                 <Text style={styles.addCatBtnText}>+ Add category</Text>
               </TouchableOpacity>
@@ -998,6 +1038,14 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#713F12',
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10,
   },
+  // "2. Select a Cuisine" header — same style as the "1." header, spaced above the box.
+  addCatStepLabel: {
+    fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#713F12',
+    textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, marginBottom: 8,
+  },
+  // Collapsed "or create a new category" — subtle brand-gold link.
+  newCatLink: { alignSelf: 'flex-start', paddingVertical: 6, marginBottom: 8 },
+  newCatLinkText: { fontFamily: 'DMSans_700Bold', fontSize: 12, color: COLORS.gold },
   addCatPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   addCatPill: {
     backgroundColor: '#85B7EB', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
@@ -1011,6 +1059,25 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border, paddingHorizontal: 12, paddingVertical: 10,
     fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, marginBottom: 8,
   },
+  // New-place gate intercept
+  gateBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28,
+  },
+  gateCard: {
+    backgroundColor: COLORS.white, borderRadius: 18, padding: 22, width: '100%',
+  },
+  gateTitle: {
+    fontFamily: 'Outfit_700Bold', fontSize: 18, color: COLORS.text,
+    lineHeight: 25, marginBottom: 18,
+  },
+  gatePrimary: {
+    backgroundColor: COLORS.gold, borderRadius: 14,
+    alignItems: 'center', paddingVertical: 13,
+  },
+  gatePrimaryText: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.white },
+  gateCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
+  gateCancelText: { fontFamily: 'DMSans_500Medium', fontSize: 14, color: COLORS.textMuted },
   // Cuisine autofill dropdown — mirrors AddPlaceScreen's dropdown so the two
   // cuisine inputs feel identical.
   addCatCuisineRow: { flexDirection: 'row', alignItems: 'center' },
