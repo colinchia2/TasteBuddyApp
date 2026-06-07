@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../api/client';
 import TierBadge from '../components/TierBadge';
+import { CategoryPill, CuisinePill } from '../components/Pill';
 import { COLORS } from '../constants/colors';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -39,13 +40,40 @@ function formatDate(iso) {
   return `${MONTHS[mo - 1]} ${d}`;                         // literal local Y/M/D, no tz math
 }
 
-const TYPE_LABELS = {
-  visit: 'Visited',
-  new_place: 'Added',
-  tier_change: 'Re-tiered',
-  delete: 'Removed',
-  pending_checkin: 'Checked in',
-};
+// Wall-clock time from the naive stored string (Rule 9 — literal, no new Date()).
+function formatTime(iso) {
+  if (!iso) return '';
+  const m = /T(\d{2}):(\d{2})/.exec(iso);
+  if (!m) return '';
+  let h = +m[1];
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${ap}`;
+}
+
+// One row's category/cuisine/tier pairs: a grouped visit carries `members`;
+// a new-place row is a single implicit pair from its top-level fields.
+function membershipPairs(item) {
+  if (item.type === 'visit' && Array.isArray(item.members) && item.members.length) {
+    return item.members;
+  }
+  return [{ category: item.category, cuisine: item.cuisine, tier: item.tier }];
+}
+
+// Line 3: date · (visits only) time · meal_period · occasion. No new Date() on stored values.
+function line3(item) {
+  const parts = [formatDate(item.date)];
+  if (item.type === 'visit') {
+    const t = formatTime(item.visited_at || item.date);
+    if (t) parts.push(t);
+    if (item.meal_period) parts.push(item.meal_period);
+    if (item.occasion && item.occasion !== item.meal_period) parts.push(item.occasion);
+  }
+  return parts.filter(Boolean).join(' · ');
+}
+
+// Muted action label = the type indicator (replaces the old colored pill/dot).
+const ACTION_LABELS = { visit: 'Visited', new_place: 'Added' };
 
 // Top filter — mirrors web Activity's chips (All / Visits / New Places). Filters
 // the loaded feed client-side by the item `type` the endpoint already returns.
@@ -55,13 +83,6 @@ const FEED_FILTERS = [
   { key: 'new_place', label: 'New Places' },
   { key: 'pending_checkin', label: 'Pending' },   // unfinished check-ins to continue
 ];
-
-// Per-type pill colors — match web's calendar-dot semantics: visit = gold,
-// new_place = category-pill blue (#85B7EB/#042C53). No borders (locked rule).
-const TYPE_PILL = {
-  visit: { bg: COLORS.goldLight, fg: COLORS.gold },
-  new_place: { bg: COLORS.pillCatBg, fg: COLORS.pillCatText },
-};
 
 function deleteEndpoint(item) {
   if (item.type === 'visit')           return `/api/visits/${item.visit_id}/mobile`;
@@ -284,28 +305,40 @@ export default function ActivityScreen({ navigation }) {
           return (
             <SwipeableCard item={item} onDelete={() => handleDelete(item)}>
               <View style={{ flex: 1 }}>
-                <View style={styles.actionRow}>
-                  {TYPE_PILL[item.type] && (
-                    <View style={[styles.typePill, { backgroundColor: TYPE_PILL[item.type].bg }]}>
-                      <Text style={[styles.typePillText, { color: TYPE_PILL[item.type].fg }]}>
-                        {TYPE_LABELS[item.type] || item.type}
-                      </Text>
-                    </View>
-                  )}
-                  <Text style={styles.placeName} numberOfLines={1}>{item.name}</Text>
-                </View>
-                <Text style={styles.meta}>
-                  {[item.category, item.occasion, formatDate(item.date)].filter(Boolean).join(' · ')}
+                {/* Line 1: muted action label + place name (no tier badge, no dot) */}
+                <Text style={styles.line1} numberOfLines={1}>
+                  <Text style={styles.actionLabel}>{ACTION_LABELS[item.type] || ''} </Text>
+                  <Text style={styles.placeName}>{item.name}</Text>
                 </Text>
+
+                {/* Line 2: per-membership category + cuisine pills + that membership's
+                    tier. Grouped visit → one pair-row per membership. Pills tappable. */}
+                <View style={styles.pairsWrap}>
+                  {membershipPairs(item).map((p, i) => (
+                    <View key={i} style={styles.pairRow}>
+                      {p.category ? (
+                        <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('Rankings', { categoryName: p.category })}>
+                          <CategoryPill label={p.category} />
+                        </TouchableOpacity>
+                      ) : null}
+                      {p.cuisine ? (
+                        <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('Rankings', { cuisine: p.cuisine })}>
+                          <CuisinePill label={p.cuisine} />
+                        </TouchableOpacity>
+                      ) : null}
+                      {p.tier ? <TierBadge tier={p.tier} size="sm" /> : null}
+                    </View>
+                  ))}
+                </View>
+
+                {/* Line 3: date (Rule-9 literal) + time/occasion for visits */}
+                <Text style={styles.meta}>{line3(item)}</Text>
               </View>
-              <View style={styles.cardRight}>
-                {item.tier && <TierBadge tier={item.tier} size="sm" />}
-                {(item.type === 'visit' || item.type === 'new_place') && (
-                  <TouchableOpacity onPress={() => handleEdit(item)} style={styles.editBtn}>
-                    <Text style={styles.editBtnText}>Edit</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              {(item.type === 'visit' || item.type === 'new_place') && (
+                <TouchableOpacity onPress={() => handleEdit(item)} style={styles.editBtn}>
+                  <Text style={styles.editBtnText}>Edit</Text>
+                </TouchableOpacity>
+              )}
             </SwipeableCard>
           );
         }}
@@ -338,18 +371,17 @@ const styles = StyleSheet.create({
   filterPillTextActive: { color: COLORS.white },
 
   // Per-item type pill — makes visit vs new-place obvious even on the All tab.
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  typePill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 12 },
-  typePillText: { fontSize: 11, fontWeight: '700' },
   card: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white,
     marginHorizontal: 16, marginBottom: 8, borderRadius: 12,
     borderWidth: 0.5, borderColor: COLORS.border, padding: 14,
   },
-  cardRight: { alignItems: 'flex-end', gap: 6 },
-  action: { fontSize: 14, color: COLORS.text },
-  actionType: { fontWeight: '500', color: COLORS.textMuted },
-  placeName: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
+  line1: { fontSize: 14 },
+  actionLabel: { fontSize: 14, fontWeight: '500', color: COLORS.textMuted },
+  placeName: { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  pairsWrap: { marginTop: 6, gap: 6 },
+  pairRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  action: { fontSize: 14, color: COLORS.text },          // pending row label
   meta: { fontSize: 12, color: COLORS.textMuted, marginTop: 3 },
   emptyState: { paddingTop: 60, alignItems: 'center' },
   emptyText: { color: COLORS.textMuted, fontSize: 14 },
