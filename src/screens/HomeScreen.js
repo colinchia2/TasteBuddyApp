@@ -577,46 +577,50 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* AI section (chat NOT active): a clear gap below the tiles, then the
-            Chat History entry directly above the prompt suggestions. flex:1 fills
-            the space so the composer below stays pinned to the bottom. */}
-        {!chatActive && (
-          <View style={styles.aiSection}>
-            <TouchableOpacity
-              style={styles.historyBtn}
-              onPress={() => navigation.navigate('ChatHistory')}
-              activeOpacity={0.75}
-            >
-              <Ionicons name="time-outline" size={15} color={COLORS.textMuted} style={{ marginRight: 6 }} />
-              <Text style={styles.historyBtnText}>Chat History</Text>
-            </TouchableOpacity>
-            <ScrollView
-              style={styles.suggestionsScroll}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.suggestionsContent}
-            >
-              {SUGGESTED_PROMPTS.map((prompt, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={styles.suggestChip}
-                  onPress={() => sendMessage(prompt)}
-                >
-                  <Text style={styles.suggestText}>{prompt}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
+        {/* Empty flex spacer (chat NOT active) — fills the area below the tiles so
+            the whole bottom group (Chat History + suggestions + input) sinks to the
+            bottom of the screen. */}
+        {!chatActive && <View style={{ flex: 1 }} />}
 
         {/* Input bar — paddingBottom is keyboard-driven (endCoordinates), and
-            drops the safe-area inset while the keyboard is visible. */}
+            drops the safe-area inset while the keyboard is visible. Chat History +
+            suggestions live INSIDE this bottom-pinned block, directly above the
+            textbox, so they're clearly grouped and basically touching the input. */}
         <Animated.View style={[styles.inputSection, { paddingBottom: kbPad }]}>
           {chatActive && (
             <TouchableOpacity onPress={resetChat} style={styles.newChatBtn}>
               <Ionicons name="refresh" size={14} color={COLORS.textMuted} />
               <Text style={styles.newChatText}>New chat</Text>
             </TouchableOpacity>
+          )}
+          {!chatActive && (
+            <>
+              <TouchableOpacity
+                style={styles.historyBtn}
+                onPress={() => navigation.navigate('ChatHistory')}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="time-outline" size={15} color={COLORS.textMuted} style={{ marginRight: 6 }} />
+                <Text style={styles.historyBtnText}>Chat History</Text>
+              </TouchableOpacity>
+              <ScrollView
+                style={styles.suggestionsScroll}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.suggestionsContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {SUGGESTED_PROMPTS.map((prompt, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.suggestChip}
+                    onPress={() => sendMessage(prompt)}
+                  >
+                    <Text style={styles.suggestText}>{prompt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
           )}
           <View style={styles.inputRow}>
             <TextInput
@@ -735,8 +739,11 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textLight, marginTop: 2,
   },
 
-  suggestionsScroll: { maxHeight: 120 },
-  suggestionsContent: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, flexDirection: 'row', alignItems: 'flex-start' },
+  // Lives inside the bottom input block now: hug content height, bleed to the
+  // screen edges (cancel inputSection's 16 padding) so chips scroll edge-to-edge,
+  // and leave a small visual break above the textbox.
+  suggestionsScroll: { marginHorizontal: -16, marginBottom: 8 },
+  suggestionsContent: { paddingHorizontal: 16, gap: 8, flexDirection: 'row', alignItems: 'center' },
   suggestChip: {
     backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 0.5,
     borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 10,
@@ -744,13 +751,11 @@ const styles = StyleSheet.create({
   },
   suggestText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.text, lineHeight: 16 },
 
-  // flex:1 fills the space between the tiles and the composer; justifyContent
-  // flex-end sinks the Chat History + suggestions down to sit directly above
-  // the chat input box (rather than floating just under the tiles).
-  aiSection: { flex: 1, paddingHorizontal: 16, justifyContent: 'flex-end' },
+  // Chat History sits at the top of the bottom group, right-aligned, snug above
+  // the suggestions.
   historyBtn: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end',
-    paddingVertical: 8, marginBottom: 4,
+    paddingVertical: 6, marginBottom: 2,
   },
   historyBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.textMuted },
 
