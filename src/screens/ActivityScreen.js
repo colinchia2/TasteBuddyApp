@@ -10,19 +10,33 @@ import { api } from '../api/client';
 import TierBadge from '../components/TierBadge';
 import { COLORS } from '../constants/colors';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Rule 9: visited_at / checkin_at are NAIVE LOCAL wall-clock strings
+// ("YYYY-MM-DDTHH:MM:SS", no zone). NEVER pass them to new Date() — Hermes parses
+// a zone-less ISO string as UTC and then shifts to local, re-dating near-midnight
+// events to the wrong day (web shows the right day from the same value). So we
+// pull the literal Y/M/D out of the string and format with ZERO timezone math.
+//
+// NOW is a genuine instant, so a fresh new Date() for "today" is legitimate — the
+// distinction is: the device's current time is real; the STORED wall-clock is not
+// an instant and must not be reinterpreted through Date parsing.
 function formatDate(iso) {
   if (!iso) return '';
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const same = (a, b) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
-  if (same(d, today)) return 'Today';
-  if (same(d, yesterday)) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return '';
+  const y = +m[1], mo = +m[2], d = +m[3];
+
+  const now = new Date();                                  // NOW only — a real instant
+  if (y === now.getFullYear() && mo === now.getMonth() + 1 && d === now.getDate()) {
+    return 'Today';
+  }
+  const yd = new Date(now);
+  yd.setDate(now.getDate() - 1);                           // device-local yesterday
+  if (y === yd.getFullYear() && mo === yd.getMonth() + 1 && d === yd.getDate()) {
+    return 'Yesterday';
+  }
+  return `${MONTHS[mo - 1]} ${d}`;                         // literal local Y/M/D, no tz math
 }
 
 const TYPE_LABELS = {
