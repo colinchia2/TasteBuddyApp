@@ -141,7 +141,6 @@ export default function EditVisitScreen({ navigation, route }) {
   }
 
   function addPhoto() {
-    if (existingPhotos.length + newPhotos.length >= 5) { Alert.alert('Max 5 photos'); return; }
     presentPhotoSource({
       onLast: () => pickLastPhoto({ onUri: uploadOnePhoto, onLibrary: pickPhoto }),
       onLibrary: pickPhoto,
@@ -170,16 +169,20 @@ export default function EditVisitScreen({ navigation, route }) {
   }
 
   async function pickPhoto() {
-    if (existingPhotos.length + newPhotos.length >= 5) { Alert.alert('Max 5 photos'); return; }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission needed', 'Allow photo access in Settings.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: false,
+      allowsMultipleSelection: true,   // multi-select; selectionLimit 0 = unlimited
+      selectionLimit: 0,
       quality: 0.9,
     });
-    if (!result.canceled && result.assets?.[0]) {
-      uploadOnePhoto(result.assets[0].uri);
+    if (!result.canceled && result.assets?.length) {
+      // Edit mode: visit exists → upload each immediately (uploadOnePhoto reports
+      // per-file failures and keeps the successful ones).
+      for (const a of result.assets) {
+        await uploadOnePhoto(a.uri);
+      }
     }
   }
 
@@ -456,11 +459,9 @@ export default function EditVisitScreen({ navigation, route }) {
                   <ActivityIndicator size="small" color="#fff" style={{ position: 'absolute', top: 26, left: 26 }} />
                 </View>
               ))}
-              {existingPhotos.length + newPhotos.length < 5 && (
-                <TouchableOpacity style={styles.photoAdd} onPress={addPhoto}>
-                  <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity style={styles.photoAdd} onPress={addPhoto}>
+                <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
+              </TouchableOpacity>
             </View>
           </View>
 

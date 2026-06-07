@@ -368,7 +368,6 @@ export default function LogVisitScreen({ navigation, route }) {
 
   // ── Photos ────────────────────────────────────────────────────────────────────
   function addPhoto() {
-    if (photos.length >= 5) { Alert.alert('Max 5 photos'); return; }
     presentPhotoSource({
       // Log a Visit defers upload until save — both options just queue the uri.
       onLast: () => pickLastPhoto({
@@ -380,20 +379,25 @@ export default function LogVisitScreen({ navigation, route }) {
   }
 
   async function pickPhoto() {
-    if (photos.length >= 5) { Alert.alert('Max 5 photos'); return; }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission needed', 'Allow photo access in Settings.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: false,
+      allowsMultipleSelection: true,   // multi-select; selectionLimit 0 = unlimited
+      selectionLimit: 0,
       quality: 0.9,
     });
-    if (!result.canceled && result.assets?.[0]) {
-      setPhotos(prev => [...prev, { uri: result.assets[0].uri }]);
+    if (!result.canceled && result.assets?.length) {
+      // Stage ALL picked photos (no max) — uploaded after the visit saves.
+      setPhotos(prev => [...prev, ...result.assets.map(a => ({ uri: a.uri }))]);
     }
   }
 
+  // Upload every staged photo, each associated to the new visit_id. Per-file
+  // try/catch so one failure never loses the rest; returns how many failed so the
+  // caller can report it.
   async function uploadPhotos(visitId, pid) {
+    let failed = 0;
     for (const photo of photos) {
       try {
         const formData = new FormData();
@@ -402,8 +406,11 @@ export default function LogVisitScreen({ navigation, route }) {
         formData.append('place_id', String(pid));
         formData.append('visit_id', String(visitId));
         await api.upload('/api/photos/upload', formData);
-      } catch {}
+      } catch {
+        failed += 1;
+      }
     }
+    return failed;
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────────
@@ -437,7 +444,10 @@ export default function LogVisitScreen({ navigation, route }) {
     try {
       const data = await api.json('/api/visits/mobile', { method: 'POST', body: JSON.stringify(payload) });
       if (photos.length > 0 && data.visit_id) {
-        await uploadPhotos(data.visit_id, placeId);
+        const failed = await uploadPhotos(data.visit_id, placeId);
+        if (failed > 0) {
+          Alert.alert('Some photos didn\'t upload', `${failed} of ${photos.length} photo${photos.length === 1 ? '' : 's'} failed. The visit and the rest were saved.`);
+        }
       }
       const tierChangedToS = activeCats.some(c => {
         const newTier = catTiers[c.user_place_id] || c.tier;
@@ -855,11 +865,9 @@ export default function LogVisitScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
             ))}
-            {photos.length < 5 && (
-              <TouchableOpacity style={styles.photoAdd} onPress={addPhoto}>
-                <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.photoAdd} onPress={addPhoto}>
+              <Ionicons name="camera-outline" size={22} color={COLORS.textMuted} />
+            </TouchableOpacity>
           </View>
 
           {/* ── Save button ── */}
