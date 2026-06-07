@@ -35,14 +35,18 @@ const rowCat = (p) => (p.category ? p.category.name : 'Other');
 // category pill (load-bearing). Single-category selection behaves as before.
 export default function RankingsScreen({ navigation, route }) {
   const { categoryId, categoryName } = route.params || {};
-  const initCat = categoryName || (categoryId === 'other' ? 'Other' : null);
+  // Entering via a CUISINE pill scopes to that cuisine across ALL categories
+  // (mirrors the web's ?view=rankings&cuisine=X link) — so no category baseline.
+  const initCuisine = route.params?.cuisine || null;
+  const initCat = initCuisine ? null : (categoryName || (categoryId === 'other' ? 'Other' : null));
   const baselineCats = useMemo(() => (initCat ? [initCat] : []), [initCat]);
+  const baselineCuisines = useMemo(() => (initCuisine ? [initCuisine] : []), [initCuisine]);
 
   const [tiers, setTiers] = useState([]);          // raw fetch [{tier,label,places:[...]}]
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [selCats, setSelCats] = useState(baselineCats);   // category names (+ 'Other')
-  const [selCuisines, setSelCuisines] = useState([]);
+  const [selCuisines, setSelCuisines] = useState(baselineCuisines);
   const [selTiers, setSelTiers] = useState([]);           // tier KEYS
   const [geo, setGeo] = useState({ city: null, neighborhood: null, country: null, state: null });
   const [activeModal, setActiveModal] = useState(null);
@@ -149,18 +153,22 @@ export default function RankingsScreen({ navigation, route }) {
   const setGeoFilter = (key, value) => { setGeo((g) => ({ ...g, [key]: value })); setActiveModal(null); };
   const toggleIn = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
-  const baselineCatsEqual =
-    selCats.length === baselineCats.length && selCats.every((c, i) => c === baselineCats[i]);
-  const anyActive = !baselineCatsEqual || selCuisines.length > 0 || selTiers.length > 0
-    || Object.values(geo).some(Boolean) || !!q;
+  const arrEq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const anyActive = !arrEq(selCats, baselineCats) || !arrEq(selCuisines, baselineCuisines)
+    || selTiers.length > 0 || Object.values(geo).some(Boolean) || !!q;
   const resetAll = () => {
-    setSelCats(baselineCats); setSelCuisines([]); setSelTiers([]);
+    setSelCats(baselineCats); setSelCuisines(baselineCuisines); setSelTiers([]);
     setGeo({ city: null, neighborhood: null, country: null, state: null }); setQ('');
   };
 
   const scopeToCategory = (name, id) => {
     setSelected(null);
     navigation.push('Rankings', { categoryId: id != null ? id : 'other', categoryName: name });
+  };
+  // Cuisine pill → that cuisine across ALL categories (mirrors web's cuisine link).
+  const scopeToCuisine = (name) => {
+    setSelected(null);
+    navigation.push('Rankings', { cuisine: name });
   };
 
   const renderTrigger = (t) => {
@@ -261,7 +269,11 @@ export default function RankingsScreen({ navigation, route }) {
                   <CategoryPill label={rowCat(item)} />
                 </TouchableOpacity>
               ) : null}
-              {item.cuisine ? <CuisinePill label={item.cuisine} /> : null}
+              {item.cuisine ? (
+                <TouchableOpacity activeOpacity={0.7} onPress={() => scopeToCuisine(item.cuisine)}>
+                  <CuisinePill label={item.cuisine} />
+                </TouchableOpacity>
+              ) : null}
               <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} style={{ marginLeft: 6 }} />
             </TouchableOpacity>
           )}
@@ -308,6 +320,7 @@ export default function RankingsScreen({ navigation, route }) {
         visible={!!selected}
         onClose={() => setSelected(null)}
         onCategoryPress={(name, id) => scopeToCategory(name, id)}
+        onCuisinePress={(name) => scopeToCuisine(name)}
       />
     </View>
   );

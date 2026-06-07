@@ -39,7 +39,7 @@ function openUrl(url) {
   Linking.openURL(full).catch(() => {});
 }
 
-export default function PlaceCardModal({ place, visible, onClose, onCategoryPress }) {
+export default function PlaceCardModal({ place, visible, onClose, onCategoryPress, onCuisinePress }) {
   if (!place) return null;
   const price = formatPrice(place.price_level);
   const locationLine = [place.neighborhood, place.city].filter(Boolean).join(', ');
@@ -79,7 +79,13 @@ export default function PlaceCardModal({ place, visible, onClose, onCategoryPres
                   <CategoryPill key={`${m.category_id}-${m.category}`} label={m.category} />
                 )
               ))}
-              {place.cuisine ? <CuisinePill label={place.cuisine} /> : null}
+              {place.cuisine ? (
+                onCuisinePress ? (
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => onCuisinePress(place.cuisine)}>
+                    <CuisinePill label={place.cuisine} />
+                  </TouchableOpacity>
+                ) : <CuisinePill label={place.cuisine} />
+              ) : null}
             </View>
 
             {(place.address || locationLine) ? (

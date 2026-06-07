@@ -53,6 +53,7 @@ const FEED_FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'visit', label: 'Visits' },
   { key: 'new_place', label: 'New Places' },
+  { key: 'pending_checkin', label: 'Pending' },   // unfinished check-ins to continue
 ];
 
 // Per-type pill colors — match web's calendar-dot semantics: visit = gold,
@@ -251,6 +252,7 @@ export default function ActivityScreen({ navigation }) {
             <Text style={styles.emptyText}>
               {feedFilter === 'all' ? 'No activity yet.'
                 : feedFilter === 'visit' ? 'No visits yet.'
+                : feedFilter === 'pending_checkin' ? 'No pending check-ins.'
                 : 'No new Places yet.'}
             </Text>
           </View>
