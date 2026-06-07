@@ -7,10 +7,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 
 // Searchable type-and-select picker (Colin has many cuisines → type to find).
-// Mirrors the site's select2 filter behaviour. One option list; typing filters it;
-// tapping selects and closes. "All <thing>" clears the filter.
-export default function FilterSelectModal({ visible, title, options, value, onSelect, onClose }) {
+// Mirrors the site's select2 filter behaviour.
+//
+// SINGLE mode (default): tapping selects and closes; "All <thing>" clears.
+// MULTI mode (multi=true): `value` is an array; tapping TOGGLES (no close, OR
+// semantics); selected rows show a checkmark; "All <thing>" clears all; a Done
+// button closes. Used for the multi-select cuisine/tier/category filters.
+export default function FilterSelectModal({
+  visible, title, options, value, onSelect, onClose,
+  multi = false, onToggle, onClearAll,
+}) {
   const [query, setQuery] = useState('');
+
+  const selectedSet = useMemo(
+    () => (multi ? new Set(Array.isArray(value) ? value : []) : null),
+    [multi, value],
+  );
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -18,16 +30,15 @@ export default function FilterSelectModal({ visible, title, options, value, onSe
     return options.filter((o) => String(o).toLowerCase().includes(needle));
   }, [options, query]);
 
-  function pick(v) {
+  function pickSingle(v) {
     setQuery('');
     onSelect(v);
   }
 
+  const noneSelected = multi ? selectedSet.size === 0 : !value;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      {/* KeyboardAvoidingView lifts the bottom sheet above the soft keyboard so the
-          search box AND the option list stay visible/tappable (the autoFocus opens
-          the keyboard immediately). iOS: padding; Android relies on adjustResize. */}
       <KeyboardAvoidingView
         style={styles.avoider}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -64,21 +75,36 @@ export default function FilterSelectModal({ visible, title, options, value, onSe
             keyboardShouldPersistTaps="handled"
             style={{ maxHeight: 320 }}
             ListHeaderComponent={() => (
-              <TouchableOpacity style={styles.row} onPress={() => pick(null)}>
-                <Text style={[styles.rowText, !value && styles.rowTextActive]}>All {title.toLowerCase()}</Text>
-                {!value ? <Ionicons name="checkmark" size={18} color={COLORS.gold} /> : null}
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => (multi ? onClearAll && onClearAll() : pickSingle(null))}
+              >
+                <Text style={[styles.rowText, noneSelected && styles.rowTextActive]}>All {title.toLowerCase()}</Text>
+                {noneSelected ? <Ionicons name="checkmark" size={18} color={COLORS.gold} /> : null}
               </TouchableOpacity>
             )}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.row} onPress={() => pick(item)}>
-                <Text style={[styles.rowText, value === item && styles.rowTextActive]} numberOfLines={1}>{item}</Text>
-                {value === item ? <Ionicons name="checkmark" size={18} color={COLORS.gold} /> : null}
-              </TouchableOpacity>
-            )}
+            renderItem={({ item }) => {
+              const active = multi ? selectedSet.has(item) : value === item;
+              return (
+                <TouchableOpacity
+                  style={styles.row}
+                  onPress={() => (multi ? (onToggle && onToggle(item)) : pickSingle(item))}
+                >
+                  <Text style={[styles.rowText, active && styles.rowTextActive]} numberOfLines={1}>{item}</Text>
+                  {active ? <Ionicons name="checkmark" size={18} color={COLORS.gold} /> : null}
+                </TouchableOpacity>
+              );
+            }}
             ListEmptyComponent={() => (
               <Text style={styles.empty}>No matches</Text>
             )}
           />
+
+          {multi ? (
+            <TouchableOpacity style={styles.doneBtn} onPress={onClose} activeOpacity={0.85}>
+              <Text style={styles.doneText}>Done</Text>
+            </TouchableOpacity>
+          ) : null}
         </TouchableOpacity>
       </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -110,4 +136,9 @@ const styles = StyleSheet.create({
   rowText: { fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text, flex: 1, marginRight: 8 },
   rowTextActive: { fontFamily: 'DMSans_700Bold', color: COLORS.tierSText },
   empty: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.textMuted, textAlign: 'center', paddingVertical: 24 },
+  doneBtn: {
+    marginTop: 12, backgroundColor: COLORS.gold, borderRadius: 14,
+    alignItems: 'center', paddingVertical: 13,
+  },
+  doneText: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.white },
 });

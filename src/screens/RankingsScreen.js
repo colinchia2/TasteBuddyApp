@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
-import { CuisinePill } from '../components/Pill';
+import { CuisinePill, CategoryPill } from '../components/Pill';
 import PlaceCardModal from '../components/PlaceCardModal';
 import FilterSelectModal from '../components/FilterSelectModal';
 
@@ -17,81 +17,98 @@ const TIER_OPTIONS = [
   { key: 'S', label: 'S Tier' }, { key: 'A', label: 'A Tier' }, { key: 'B', label: 'B Tier' },
   { key: 'C', label: 'C-Tier — Okay' }, { key: 'NEXT_UP', label: 'Next Up' }, { key: 'TBE', label: 'TBE' },
 ];
-const tierKeyToLabel = (k) => (TIER_OPTIONS.find((o) => o.key === k) || {}).label || null;
+const tierKeyToLabel = (k) => (TIER_OPTIONS.find((o) => o.key === k) || {}).label || k;
 const tierLabelToKey = (l) => (TIER_OPTIONS.find((o) => o.label === l) || {}).key || null;
 
 const uniqSorted = (arr) => [...new Set(arr.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+// A row's category name, with null (uncategorized) shown as the literal "Other"
+// (mirrors the web's "Other" bucket). Used for filtering + the per-row pill.
+const rowCat = (p) => (p.category ? p.category.name : 'Other');
 
-// Per-category rankings. Fetches the read-only rankings endpoint ONCE, derives the
-// filter vocabularies from the loaded places, and filters by tier / cuisine / geo /
-// name search CLIENT-SIDE for instant, native-feeling type-and-select refinement
-// (the server always returns all 6 tiers — Rule #15). Tap a row → read-only card.
+// My Places → Rankings. Fetches ALL of the user's memberships ONCE (one
+// user_places row per place+category), then filters client-side. Category /
+// Cuisine / Tier are MULTI-select (OR within each); geo + name are single.
+//
+// COMBINED VIEW: when 0 (All) or >1 categories are selected, a place appears ONCE
+// PER MATCHING (category,tier) membership — e.g. A-Tier in Bar AND B-Tier in
+// Chicken Sandwich shows in BOTH the A and B sections, each tagged with its
+// category pill (load-bearing). Single-category selection behaves as before.
 export default function RankingsScreen({ navigation, route }) {
   const { categoryId, categoryName } = route.params || {};
-  const [tiers, setTiers] = useState([]);          // [{tier,label,places:[...]}]
+  const initCat = categoryName || (categoryId === 'other' ? 'Other' : null);
+  const baselineCats = useMemo(() => (initCat ? [initCat] : []), [initCat]);
+
+  const [tiers, setTiers] = useState([]);          // raw fetch [{tier,label,places:[...]}]
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [filters, setFilters] = useState({ tier: null, cuisine: null, city: null, neighborhood: null, country: null, state: null });
-  const [activeModal, setActiveModal] = useState(null);   // which filter modal is open
+  const [selCats, setSelCats] = useState(baselineCats);   // category names (+ 'Other')
+  const [selCuisines, setSelCuisines] = useState([]);
+  const [selTiers, setSelTiers] = useState([]);           // tier KEYS
+  const [geo, setGeo] = useState({ city: null, neighborhood: null, country: null, state: null });
+  const [activeModal, setActiveModal] = useState(null);
   const [selected, setSelected] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const params = categoryId != null ? `?category=${encodeURIComponent(categoryId)}` : '';
-      const data = await api.json(`/api/places/rankings${params}`);
+      // Fetch ALL memberships (no category param) — client filters from here.
+      const data = await api.json('/api/places/rankings');
       setTiers(Array.isArray(data.tiers) ? data.tiers : []);
     } catch (_) {
       // keep stale
     } finally {
       setLoading(false);
     }
-  }, [categoryId]);
+  }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const allPlaces = useMemo(() => tiers.flatMap((t) => t.places), [tiers]);
+  // Flat list of membership rows, each carrying its own tier (serializer field).
+  const allRows = useMemo(() => tiers.flatMap((t) => t.places), [tiers]);
 
-  // Filter vocabularies derived from the loaded places, so options always match data.
   const vocab = useMemo(() => ({
-    cuisine: uniqSorted(allPlaces.map((p) => p.cuisine)),
-    city: uniqSorted(allPlaces.map((p) => p.city)),
-    neighborhood: uniqSorted(allPlaces.map((p) => p.neighborhood)),
-    country: uniqSorted(allPlaces.map((p) => p.country)),
-    state: uniqSorted(allPlaces.map((p) => p.state)),
-  }), [allPlaces]);
+    category: uniqSorted(allRows.map(rowCat)),
+    cuisine: uniqSorted(allRows.map((p) => p.cuisine)),
+    city: uniqSorted(allRows.map((p) => p.city)),
+    neighborhood: uniqSorted(allRows.map((p) => p.neighborhood)),
+    country: uniqSorted(allRows.map((p) => p.country)),
+    state: uniqSorted(allRows.map((p) => p.state)),
+  }), [allRows]);
 
-  const setFilter = (key, value) => { setFilters((f) => ({ ...f, [key]: value })); setActiveModal(null); };
-  const clearAll = () => setFilters({ tier: null, cuisine: null, city: null, neighborhood: null, country: null, state: null });
-  const anyActive = Object.values(filters).some(Boolean) || !!q;
+  const combined = selCats.length !== 1;   // 0 (All) or >1 → show category pills
 
-  // Apply all active filters client-side; keep the 6-tier grouping.
+  const title = selCats.length === 1 ? selCats[0]
+    : selCats.length > 1 ? selCats.join(' + ')
+    : 'All Categories';
+
+  // Build the six tier buckets from the filtered membership rows (once per
+  // membership — NO dedupe). All 6 sections in combined view; single-category
+  // drops empty sections (unchanged from before — no regression).
   const sections = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return tiers
-      .filter((t) => !filters.tier || t.tier === filters.tier)
-      .map((t) => ({
-        tier: t.tier,
-        label: t.label,
-        data: t.places.filter((p) => {
-          if (filters.cuisine && p.cuisine !== filters.cuisine) return false;
-          if (filters.city && p.city !== filters.city) return false;
-          if (filters.neighborhood && p.neighborhood !== filters.neighborhood) return false;
-          if (filters.country && p.country !== filters.country) return false;
-          if (filters.state && p.state !== filters.state) return false;
-          if (needle && !(p.display_name || '').toLowerCase().includes(needle)) return false;
-          return true;
-        }),
-      }))
-      .filter((s) => s.data.length > 0);
-  }, [tiers, filters, q]);
+    const catSet = new Set(selCats);
+    const cuiSet = new Set(selCuisines);
+    const tierSet = new Set(selTiers);
+    const buckets = TIER_ORDER.map((tk) => ({ tier: tk, label: tierKeyToLabel(tk), data: [] }));
+    const byTier = Object.fromEntries(buckets.map((b) => [b.tier, b]));
 
-  const isEmpty = !loading && sections.length === 0;
+    allRows.forEach((p) => {
+      if (catSet.size && !catSet.has(rowCat(p))) return;
+      if (cuiSet.size && !cuiSet.has(p.cuisine)) return;
+      if (tierSet.size && !tierSet.has(p.tier)) return;
+      if (geo.city && p.city !== geo.city) return;
+      if (geo.neighborhood && p.neighborhood !== geo.neighborhood) return;
+      if (geo.country && p.country !== geo.country) return;
+      if (geo.state && p.state !== geo.state) return;
+      if (needle && !(p.display_name || '').toLowerCase().includes(needle)) return;
+      if (byTier[p.tier]) byTier[p.tier].data.push(p);
+    });
+    byTier.S.data.sort((a, b) => (a.s_tier_position || 999) - (b.s_tier_position || 999));
+    return buckets.filter((b) => combined || b.data.length > 0);
+  }, [allRows, selCats, selCuisines, selTiers, geo, q, combined]);
 
-  // Filters render in two labelled groups, every filter always shown for a complete,
-  // consistent set. A filter is ENABLED only when there's a real choice (>=2 distinct
-  // values; state >=1; tier whenever there are places); otherwise it renders GREYED
-  // (disabled). Category is always greyed — this screen is already scoped to one
-  // category (the group/order mirrors the web rankings filter bar).
+  const isEmpty = !loading && sections.every((s) => s.data.length === 0);
+
+  // ── Filter triggers ──────────────────────────────────────────────────────
   const CAT_CUISINE = [
     { key: 'category', title: 'Category' },
     { key: 'cuisine', title: 'Cuisine' },
@@ -105,21 +122,50 @@ export default function RankingsScreen({ navigation, route }) {
   ];
 
   const isEnabled = (key) => {
-    if (key === 'category') return false;             // scoped screen → always greyed
-    if (key === 'tier') return allPlaces.length > 0;
+    if (key === 'category') return vocab.category.length > 0;   // un-greyed
+    if (key === 'cuisine') return vocab.cuisine.length > 0;
+    if (key === 'tier') return allRows.length > 0;
     if (key === 'state') return vocab.state.length >= 1;
     return (vocab[key] || []).length >= 2;
   };
 
-  const triggerLabel = (key, title) => {
-    if (key === 'category') return categoryName || title;   // the current category
-    if (key === 'tier') return filters.tier ? tierKeyToLabel(filters.tier) : title;
-    return filters[key] || title;
+  const multiCount = { category: selCats.length, cuisine: selCuisines.length, tier: selTiers.length };
+  const triggerLabel = (key, t) => {
+    if (key === 'category') return selCats.length === 1 ? selCats[0]
+      : selCats.length > 1 ? `Categories (${selCats.length})` : 'All categories';
+    if (key === 'cuisine' || key === 'tier') {
+      const n = multiCount[key];
+      return n > 0 ? `${t} (${n})` : t;
+    }
+    return geo[key] || t;
+  };
+  const isActive = (key) => {
+    if (key === 'category') return selCats.length >= 1;
+    if (key === 'cuisine') return selCuisines.length > 0;
+    if (key === 'tier') return selTiers.length > 0;
+    return !!geo[key];
+  };
+
+  const setGeoFilter = (key, value) => { setGeo((g) => ({ ...g, [key]: value })); setActiveModal(null); };
+  const toggleIn = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+
+  const baselineCatsEqual =
+    selCats.length === baselineCats.length && selCats.every((c, i) => c === baselineCats[i]);
+  const anyActive = !baselineCatsEqual || selCuisines.length > 0 || selTiers.length > 0
+    || Object.values(geo).some(Boolean) || !!q;
+  const resetAll = () => {
+    setSelCats(baselineCats); setSelCuisines([]); setSelTiers([]);
+    setGeo({ city: null, neighborhood: null, country: null, state: null }); setQ('');
+  };
+
+  const scopeToCategory = (name, id) => {
+    setSelected(null);
+    navigation.push('Rankings', { categoryId: id != null ? id : 'other', categoryName: name });
   };
 
   const renderTrigger = (t) => {
     const enabled = isEnabled(t.key);
-    const active = enabled && !!filters[t.key];
+    const active = enabled && isActive(t.key);
     return (
       <TouchableOpacity
         key={t.key}
@@ -134,51 +180,38 @@ export default function RankingsScreen({ navigation, route }) {
         >
           {triggerLabel(t.key, t.title)}
         </Text>
-        <Ionicons
-          name="chevron-down" size={13}
-          color={active ? '#fff' : (enabled ? COLORS.textMuted : COLORS.textLight)}
-          style={{ marginLeft: 4 }}
-        />
+        <Ionicons name="chevron-down" size={13}
+          color={active ? '#fff' : (enabled ? COLORS.textMuted : COLORS.textLight)} style={{ marginLeft: 4 }} />
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.container}>
-      <ScreenHeader title={categoryName || 'Rankings'} navigation={navigation} />
+      <ScreenHeader title={title} navigation={navigation} />
 
-      {/* Search — standard iOS keyboard with predictive text (autoCorrect/spellCheck) */}
       <View style={styles.searchBar}>
         <Ionicons name="search" size={16} color={COLORS.textLight} style={{ marginRight: 8 }} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search this category…"
+          placeholder="Search places…"
           placeholderTextColor={COLORS.textLight}
           value={q}
           onChangeText={setQ}
           clearButtonMode="while-editing"
-          autoCorrect
-          spellCheck
-          autoCapitalize="sentences"
-          keyboardType="default"
+          autoCorrect spellCheck autoCapitalize="sentences" keyboardType="default"
         />
       </View>
 
-      {/* Filters — two labelled groups (flex-wrap, no horizontal scroll). Name search
-          sits above; greyed pills mean there's no choice to make for that filter. */}
-      <Text style={styles.groupLabel}>Category &amp; Cuisine</Text>
-      <View style={styles.filterRow}>
-        {CAT_CUISINE.map((t) => renderTrigger(t))}
-      </View>
+      <Text style={styles.groupLabel}>Category, Cuisine &amp; Tier</Text>
+      <View style={styles.filterRow}>{CAT_CUISINE.map(renderTrigger)}</View>
 
       <Text style={styles.groupLabel}>Location</Text>
-      <View style={styles.filterRow}>
-        {LOCATION.map((t) => renderTrigger(t))}
-      </View>
+      <View style={styles.filterRow}>{LOCATION.map(renderTrigger)}</View>
 
       {anyActive ? (
         <View style={styles.clearRow}>
-          <TouchableOpacity style={styles.clearAll} onPress={() => { clearAll(); setQ(''); }} activeOpacity={0.75}>
+          <TouchableOpacity style={styles.clearAll} onPress={resetAll} activeOpacity={0.75}>
             <Text style={styles.clearAllText}>Clear filters</Text>
           </TouchableOpacity>
         </View>
@@ -189,13 +222,13 @@ export default function RankingsScreen({ navigation, route }) {
       ) : isEmpty ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>
-            {anyActive ? 'No places match your filters.' : 'No places in this category yet.'}
+            {anyActive ? 'No places match your filters.' : 'No places yet.'}
           </Text>
         </View>
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={(item) => item.slug || String(item.user_place_id)}
+          keyExtractor={(item) => String(item.user_place_id)}
           stickySectionHeadersEnabled={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 40 }}
@@ -221,6 +254,13 @@ export default function RankingsScreen({ navigation, route }) {
                   </Text>
                 ) : null}
               </View>
+              {/* In the combined view the category pill is load-bearing — it shows
+                  WHICH membership this row represents. Tappable → scope to it. */}
+              {combined ? (
+                <TouchableOpacity activeOpacity={0.7} onPress={() => scopeToCategory(rowCat(item), item.category ? item.category.id : null)}>
+                  <CategoryPill label={rowCat(item)} />
+                </TouchableOpacity>
+              ) : null}
               {item.cuisine ? <CuisinePill label={item.cuisine} /> : null}
               <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} style={{ marginLeft: 6 }} />
             </TouchableOpacity>
@@ -228,28 +268,47 @@ export default function RankingsScreen({ navigation, route }) {
         />
       )}
 
-      {/* Type-and-select filter modals */}
+      {/* Multi-select: Category / Cuisine / Tier (OR). Geo: single. */}
       <FilterSelectModal
-        visible={activeModal === 'tier'}
-        title="Tier"
-        options={TIER_OPTIONS.map((o) => o.label)}
-        value={tierKeyToLabel(filters.tier)}
-        onSelect={(label) => setFilter('tier', label ? tierLabelToKey(label) : null)}
+        visible={activeModal === 'category'} title="Categories" multi
+        options={vocab.category} value={selCats}
+        onToggle={(name) => setSelCats((a) => toggleIn(a, name))}
+        onClearAll={() => setSelCats([])}
         onClose={() => setActiveModal(null)}
       />
-      {['cuisine', 'city', 'neighborhood', 'country', 'state'].map((key) => (
+      <FilterSelectModal
+        visible={activeModal === 'cuisine'} title="Cuisines" multi
+        options={vocab.cuisine} value={selCuisines}
+        onToggle={(name) => setSelCuisines((a) => toggleIn(a, name))}
+        onClearAll={() => setSelCuisines([])}
+        onClose={() => setActiveModal(null)}
+      />
+      <FilterSelectModal
+        visible={activeModal === 'tier'} title="Tiers" multi
+        options={TIER_OPTIONS.map((o) => o.label)}
+        value={selTiers.map(tierKeyToLabel)}
+        onToggle={(label) => { const k = tierLabelToKey(label); if (k) setSelTiers((a) => toggleIn(a, k)); }}
+        onClearAll={() => setSelTiers([])}
+        onClose={() => setActiveModal(null)}
+      />
+      {['city', 'neighborhood', 'country', 'state'].map((key) => (
         <FilterSelectModal
           key={key}
           visible={activeModal === key}
           title={key.charAt(0).toUpperCase() + key.slice(1)}
           options={vocab[key]}
-          value={filters[key]}
-          onSelect={(v) => setFilter(key, v)}
+          value={geo[key]}
+          onSelect={(v) => setGeoFilter(key, v)}
           onClose={() => setActiveModal(null)}
         />
       ))}
 
-      <PlaceCardModal place={selected} visible={!!selected} onClose={() => setSelected(null)} />
+      <PlaceCardModal
+        place={selected}
+        visible={!!selected}
+        onClose={() => setSelected(null)}
+        onCategoryPress={(name, id) => scopeToCategory(name, id)}
+      />
     </View>
   );
 }
@@ -263,7 +322,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, marginTop: 12, paddingHorizontal: 14,
   },
   searchInput: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 15, color: COLORS.text, paddingVertical: 11 },
-  // Muted group subheader — reuses the caption color/font (no new tokens).
   groupLabel: {
     fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.6,
@@ -273,10 +331,9 @@ const styles = StyleSheet.create({
   trigger: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 0.5, borderColor: COLORS.border,
-    paddingHorizontal: 12, paddingVertical: 7, maxWidth: 200,
+    paddingHorizontal: 12, paddingVertical: 7, maxWidth: 220,
   },
   triggerActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
-  // Greyed/disabled: dimmed, non-interactive (no choice to make for this filter).
   triggerDisabled: { backgroundColor: COLORS.offWhite, borderColor: COLORS.borderLight, opacity: 0.55 },
   triggerText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.textMuted },
   triggerTextActive: { color: '#fff' },
@@ -294,9 +351,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, marginHorizontal: 16, marginBottom: 8,
-    borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border, padding: 14,
+    borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border, padding: 14, gap: 6,
   },
-  position: { fontFamily: 'Outfit_800ExtraBold', fontSize: 15, color: COLORS.gold, marginRight: 12, minWidth: 30 },
+  position: { fontFamily: 'Outfit_800ExtraBold', fontSize: 15, color: COLORS.gold, marginRight: 6, minWidth: 30 },
   name: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.text },
   meta: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 3 },
   emptyState: { paddingTop: 60, alignItems: 'center', paddingHorizontal: 32 },

@@ -39,10 +39,17 @@ function openUrl(url) {
   Linking.openURL(full).catch(() => {});
 }
 
-export default function PlaceCardModal({ place, visible, onClose }) {
+export default function PlaceCardModal({ place, visible, onClose, onCategoryPress }) {
   if (!place) return null;
   const price = formatPrice(place.price_level);
   const locationLine = [place.neighborhood, place.city].filter(Boolean).join(', ');
+
+  // ALL of this place's category memberships (e.g. Bar + Chicken Sandwich), from
+  // the endpoint's additive `memberships`. Falls back to the single scoped category
+  // for older payloads. Each pill is tappable → opens that category's ranking.
+  const memberships = (Array.isArray(place.memberships) && place.memberships.length)
+    ? place.memberships
+    : (place.category ? [{ category_id: place.category.id, category: place.category.name }] : []);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -59,7 +66,19 @@ export default function PlaceCardModal({ place, visible, onClose }) {
 
             <View style={styles.pillRow}>
               <TierBadge tier={place.tier} size="sm" />
-              {place.category?.name ? <CategoryPill label={place.category.name} /> : null}
+              {memberships.map((m) => (
+                onCategoryPress ? (
+                  <TouchableOpacity
+                    key={`${m.category_id}-${m.category}`}
+                    activeOpacity={0.7}
+                    onPress={() => onCategoryPress(m.category, m.category_id)}
+                  >
+                    <CategoryPill label={m.category} />
+                  </TouchableOpacity>
+                ) : (
+                  <CategoryPill key={`${m.category_id}-${m.category}`} label={m.category} />
+                )
+              ))}
               {place.cuisine ? <CuisinePill label={place.cuisine} /> : null}
             </View>
 
