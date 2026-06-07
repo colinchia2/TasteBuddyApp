@@ -744,11 +744,12 @@ const styles = StyleSheet.create({
   },
   suggestText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.text, lineHeight: 16 },
 
-  // flex:1 fills the space between the tiles and the bottom-pinned composer.
-  // marginTop is the clear whitespace gap below the 3 tiles.
-  aiSection: { flex: 1, paddingHorizontal: 16, marginTop: 12 },
+  // flex:1 fills the space between the tiles and the composer; justifyContent
+  // flex-end sinks the Chat History + suggestions down to sit directly above
+  // the chat input box (rather than floating just under the tiles).
+  aiSection: { flex: 1, paddingHorizontal: 16, justifyContent: 'flex-end' },
   historyBtn: {
-    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end',
     paddingVertical: 8, marginBottom: 4,
   },
   historyBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.textMuted },
