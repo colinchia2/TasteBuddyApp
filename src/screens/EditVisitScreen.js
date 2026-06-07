@@ -17,6 +17,19 @@ function fmtDate(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Build a LOCAL Date for the native DatePicker from a naive 'YYYY-MM-DD'
+// (optionally '…THH:MM') string. Rule 9: NEVER `new Date(string)` on a stored
+// wall-clock value — Hermes parses a date-only string as UTC, so the picker would
+// open on the PRIOR day for users behind UTC (e.g. America/New_York). The numeric
+// constructor interprets its args as LOCAL, so the picker opens on the stored day.
+function localDateFromYMD(s) {
+  if (!s) return new Date();
+  const [datePart, timePart] = String(s).split('T');
+  const [y, mo, d] = datePart.split('-').map(Number);
+  const [h, mi] = (timePart || '').split(':').map(Number);
+  return new Date(y, (mo || 1) - 1, d || 1, h || 0, mi || 0);
+}
+
 function formatDateDisplay(isoDate) {
   if (!isoDate) return '';
   const [y, m, d] = isoDate.split('-');
@@ -301,7 +314,7 @@ export default function EditVisitScreen({ navigation, route }) {
             </TouchableOpacity>
             {showDatePicker && (
               <DateTimePicker
-                value={new Date(visitDate)}
+                value={localDateFromYMD(visitDate)}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 maximumDate={new Date()}
