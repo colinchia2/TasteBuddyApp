@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, ScrollView, Platform,
-  ActivityIndicator, Keyboard, Animated, PanResponder,
+  ActivityIndicator, Keyboard, Animated, PanResponder, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -349,11 +349,6 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
-  function activateAI() {
-    setChatActive(true);
-    setTimeout(() => chatInputRef.current?.focus(), 200);
-  }
-
   function resetChat() {
     if (streamAbortRef.current) { streamAbortRef.current.abort(); streamAbortRef.current = null; }
     stopFlushTimer();
@@ -486,14 +481,6 @@ export default function HomeScreen({ navigation, route }) {
               </View>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.aiTile} onPress={activateAI} activeOpacity={0.82}>
-              <Ionicons name="chatbubble-ellipses" size={26} color={COLORS.gold} style={{ marginRight: 14 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.aiTileTitle}>Ask TasteBuddy AI Anything</Text>
-                <Text style={styles.aiTileSub}>Get personalized recommendations</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.gold} />
-            </TouchableOpacity>
           </View>
         )}
 
@@ -590,31 +577,11 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Suggestions — shown when chat is NOT active */}
+        {/* AI section (chat NOT active): a clear gap below the tiles, then the
+            Chat History entry directly above the prompt suggestions. flex:1 fills
+            the space so the composer below stays pinned to the bottom. */}
         {!chatActive && (
-          <ScrollView
-            style={styles.suggestionsScroll}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.suggestionsContent}
-          >
-            {SUGGESTED_PROMPTS.map((prompt, i) => (
-              <TouchableOpacity
-                key={i}
-                style={styles.suggestChip}
-                onPress={() => sendMessage(prompt)}
-              >
-                <Text style={styles.suggestText}>{prompt}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
-
-        {/* Single, unobtrusive entry to the full chat-history screen. The flex
-            spacer fills the area above the composer so the input stays pinned to
-            the bottom (the chat ScrollView plays that role during a conversation). */}
-        {!chatActive && (
-          <View style={styles.historyWrap}>
+          <View style={styles.aiSection}>
             <TouchableOpacity
               style={styles.historyBtn}
               onPress={() => navigation.navigate('ChatHistory')}
@@ -623,6 +590,22 @@ export default function HomeScreen({ navigation, route }) {
               <Ionicons name="time-outline" size={15} color={COLORS.textMuted} style={{ marginRight: 6 }} />
               <Text style={styles.historyBtnText}>Chat History</Text>
             </TouchableOpacity>
+            <ScrollView
+              style={styles.suggestionsScroll}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestionsContent}
+            >
+              {SUGGESTED_PROMPTS.map((prompt, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.suggestChip}
+                  onPress={() => sendMessage(prompt)}
+                >
+                  <Text style={styles.suggestText}>{prompt}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
 
@@ -639,7 +622,7 @@ export default function HomeScreen({ navigation, route }) {
             <TextInput
               ref={chatInputRef}
               style={styles.input}
-              placeholder="Ask TasteBuddy AI anything…"
+              placeholder="Ask TasteBuddy AI Anything"
               placeholderTextColor={COLORS.textLight}
               value={inputText}
               onChangeText={setInputText}
@@ -660,11 +643,14 @@ export default function HomeScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
           {!chatActive && (
-            <Text style={styles.desktopHint}>
-              <Text style={{ fontStyle: 'italic' }}>
-                Go to TasteBuddy.ai on your desktop to see more features and analytics!
+            <TouchableOpacity
+              onPress={() => Linking.openURL('https://tastebuddy-colinchia2.pythonanywhere.com/')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.desktopLink}>
+                Go to TasteBuddy.ai on your desktop to see your TasteBoard and more features!
               </Text>
-            </Text>
+            </TouchableOpacity>
           )}
         </Animated.View>
     </View>
@@ -699,14 +685,6 @@ const styles = StyleSheet.create({
   tileIcon: { marginBottom: 'auto' },
   tileTitle: { fontFamily: 'Outfit_700Bold', fontSize: 15, marginTop: 20, marginBottom: 3 },
   tileSub: { fontFamily: 'DMSans_400Regular', fontSize: 11, opacity: 0.75, lineHeight: 15 },
-  aiTile: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.white, borderRadius: 16,
-    borderWidth: 1, borderColor: COLORS.gold,
-    paddingHorizontal: 18, paddingVertical: 14,
-  },
-  aiTileTitle: { fontFamily: 'Outfit_700Bold', fontSize: 15, color: COLORS.text },
-  aiTileSub: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   browseTile: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 16,
@@ -766,10 +744,12 @@ const styles = StyleSheet.create({
   },
   suggestText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.text, lineHeight: 16 },
 
-  historyWrap: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+  // flex:1 fills the space between the tiles and the bottom-pinned composer.
+  // marginTop is the clear whitespace gap below the 3 tiles.
+  aiSection: { flex: 1, paddingHorizontal: 16, marginTop: 12 },
   historyBtn: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
-    paddingVertical: 8,
+    paddingVertical: 8, marginBottom: 4,
   },
   historyBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.textMuted },
 
@@ -793,8 +773,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: COLORS.border },
-  desktopHint: {
-    fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textMuted,
+  desktopLink: {
+    fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.gold,
     textAlign: 'center', marginTop: 10,
   },
 });
