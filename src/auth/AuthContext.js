@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { BASE_URL } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -26,6 +28,37 @@ export function AuthProvider({ children }) {
     } catch {}
   }
 
+  // Backfill the Expo push token for already-onboarded users (FIX 1). The token was
+  // only ever registered at onboarding / the Settings toggle — users who onboarded
+  // in Expo Go got a NULL token and there was no backfill, so push silently skipped
+  // them forever. Runs once per launch (bootCheck) and per login — NOT per render.
+  // Only acts when OS permission is already granted (prompts ONLY if undetermined,
+  // never nags a user who denied), and only PATCHes when the token actually changed.
+  async function _registerPushToken(token) {
+    try {
+      if (!token) return;
+      let status = (await Notifications.getPermissionsAsync()).status;
+      if (status === 'undetermined') {
+        status = (await Notifications.requestPermissionsAsync()).status;
+      }
+      if (status !== 'granted') return;            // denied → skip (no nag)
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      const tokenData = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : {});
+      const expoToken = tokenData?.data;
+      if (!expoToken) return;
+      const lastSynced = await AsyncStorage.getItem('synced_push_token');
+      if (lastSynced === expoToken) return;        // unchanged → no needless write
+      const res = await fetch(`${BASE_URL}/api/auth/push-token`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ expo_push_token: expoToken }),
+      });
+      if (res.ok) await AsyncStorage.setItem('synced_push_token', expoToken);
+    } catch {
+      // Expo Go / no projectId / network — fail gracefully, never crash boot.
+    }
+  }
+
   async function bootCheck() {
     try {
       const token = await AsyncStorage.getItem('access_token');
@@ -36,6 +69,7 @@ export function AuthProvider({ children }) {
       if (res.ok) {
         setUser(await res.json());
         _captureTimezone(token);
+        _registerPushToken(token);
       } else {
         await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
       }
@@ -56,6 +90,7 @@ export function AuthProvider({ children }) {
     if (meRes.ok) {
       setUser(meBody);
       _captureTimezone(data.access_token);
+      _registerPushToken(data.access_token);
     } else {
       throw new Error('Could not load user after authentication');
     }
