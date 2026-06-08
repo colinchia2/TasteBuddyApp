@@ -108,6 +108,9 @@ export default function HomeScreen({ navigation, route }) {
   const [chatActive, setChatActive] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
+  // Drives "typing focus" — collapse the bulky home tiles while the keyboard is up so a
+  // multiline input always has room above the keyboard (else it overflows behind it).
+  const [keyboardShown, setKeyboardShown] = useState(false);
   const [loading, setLoading] = useState(false);
   const [awaitingFirstToken, setAwaitingFirstToken] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
@@ -412,6 +415,7 @@ export default function HomeScreen({ navigation, route }) {
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const onShow = (e) => {
       kbVisible.current = true;
+      setKeyboardShown(true);
       const h = (e && e.endCoordinates && e.endCoordinates.height) || 0;
       Animated.timing(kbPad, {
         toValue: h + GAP,                       // flush above keyboard, no safe inset
@@ -421,6 +425,7 @@ export default function HomeScreen({ navigation, route }) {
     };
     const onHide = (e) => {
       kbVisible.current = false;
+      setKeyboardShown(false);
       Animated.timing(kbPad, {
         toValue: insets.bottom + GAP,            // restore safe-area inset at rest
         duration: (e && e.duration) || 250,
@@ -485,8 +490,9 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Tiles — hidden when chat is active */}
-        {!chatActive && (
+        {/* Tiles — hidden when chat is active, and collapsed while typing (keyboard up)
+            so the input can grow above the keyboard without overflowing behind it. */}
+        {!chatActive && !keyboardShown && (
           <View style={styles.tilesContainer}>
             <View style={styles.tileRow}>
               {TOP_TILES.map(tile => (
@@ -628,7 +634,7 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={styles.newChatText}>New chat</Text>
             </TouchableOpacity>
           )}
-          {!chatActive && (
+          {!chatActive && !keyboardShown && (
             <>
               <TouchableOpacity
                 style={styles.historyBtn}
@@ -681,7 +687,7 @@ export default function HomeScreen({ navigation, route }) {
               <Ionicons name="arrow-up" size={18} color="#fff" />
             </TouchableOpacity>
           </View>
-          {!chatActive && (
+          {!chatActive && !keyboardShown && (
             <TouchableOpacity
               onPress={() => Linking.openURL('https://tastebuddy-colinchia2.pythonanywhere.com/')}
               activeOpacity={0.7}
