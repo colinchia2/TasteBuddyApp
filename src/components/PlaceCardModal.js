@@ -49,7 +49,7 @@ export default function PlaceCardModal({ place, visible, onClose, onCategoryPres
   // for older payloads. Each pill is tappable → opens that category's ranking.
   const memberships = (Array.isArray(place.memberships) && place.memberships.length)
     ? place.memberships
-    : (place.category ? [{ category_id: place.category.id, category: place.category.name }] : []);
+    : (place.category ? [{ category_id: place.category.id, category: place.category.name, cuisine: place.cuisine }] : []);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -66,27 +66,24 @@ export default function PlaceCardModal({ place, visible, onClose, onCategoryPres
 
             <View style={styles.pillRow}>
               <TierBadge tier={place.tier} size="sm" />
-              {memberships.map((m) => (
-                onCategoryPress ? (
-                  <TouchableOpacity
-                    key={`${m.category_id}-${m.category}`}
-                    activeOpacity={0.7}
-                    onPress={() => onCategoryPress(m.category, m.category_id)}
-                  >
+            </View>
+            {/* Each category paired with ITS OWN cuisine (one row per membership). */}
+            {memberships.map((m, i) => (
+              <View key={`${m.category_id}-${i}`} style={styles.membershipRow}>
+                {onCategoryPress ? (
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => onCategoryPress(m.category, m.category_id)}>
                     <CategoryPill label={m.category} />
                   </TouchableOpacity>
-                ) : (
-                  <CategoryPill key={`${m.category_id}-${m.category}`} label={m.category} />
-                )
-              ))}
-              {place.cuisine ? (
-                onCuisinePress ? (
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => onCuisinePress(place.cuisine)}>
-                    <CuisinePill label={place.cuisine} />
-                  </TouchableOpacity>
-                ) : <CuisinePill label={place.cuisine} />
-              ) : null}
-            </View>
+                ) : <CategoryPill label={m.category} />}
+                {m.cuisine ? (
+                  onCuisinePress ? (
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => onCuisinePress(m.cuisine)}>
+                      <CuisinePill label={m.cuisine} />
+                    </TouchableOpacity>
+                  ) : <CuisinePill label={m.cuisine} />
+                ) : null}
+              </View>
+            ))}
 
             {(place.address || locationLine) ? (
               <View style={styles.factRow}>
@@ -155,6 +152,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   name: { flex: 1, fontFamily: 'Outfit_700Bold', fontSize: 22, color: COLORS.text, marginRight: 12 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, alignItems: 'center' },
+  membershipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 8 },
   factRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   factIcon: { marginRight: 8 },
   factText: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, flexShrink: 1 },

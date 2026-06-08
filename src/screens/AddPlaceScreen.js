@@ -348,8 +348,8 @@ export default function AddPlaceScreen({ navigation, route }) {
         neighborhood: selectedPlace.neighborhood || null,
         lat: selectedPlace.lat,
         lng: selectedPlace.lng,
-        categories: [{ category_id: selectedCategory?.id || null, tier }],
-        cuisine: cuisine.trim(),
+        categories: [{ category_id: selectedCategory?.id || null, tier, cuisine: cuisine.trim() || null }],
+        cuisine: cuisine.trim(),   // kept top-level for backward-compat
       };
       if (needConfirm) {
         body.location_confirmed = true;
