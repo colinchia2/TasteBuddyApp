@@ -19,10 +19,22 @@ Flask app lives at: `C:\Users\colin\OneDrive\Documents\Python\TasteBuddy`
 npx expo start --dev-client --tunnel
 npx expo whoami                       # should return: colinchia2
 
+# OTA — the DEFAULT deploy for app-JS changes (build 3 on TestFlight, fingerprint runtime 36f21ad4…):
+eas update --branch production --message "..." --environment production
+#   Pull on device: open → wait ~15s → fully quit → reopen.
+#   OTA only works for pure-JS changes. NEW native dep / SDK bump / permissions / icon / app.json
+#   native config → needs a full build + submit (below) + a new TestFlight build.
+
 # Production → TestFlight (INTERACTIVE Apple 2FA — run in a real terminal, not via tooling):
 eas build --profile production --platform ios
 eas submit --platform ios --latest    # internal TestFlight only; never submit for public App Store review
 ```
+
+## Conventions & docs (web repo holds the canonical detail)
+- **Datetime (Rule 9):** visit/check-in times are **naive-local** strings — NEVER `new Date(storedValue)`
+  (Hermes parses zone-less ISO as UTC and shifts the day); build dates from local Y/M/D
+  (`localDateFromYMD`). Full rule: web repo `CLAUDE_CODE_PREAMBLE.md` (Rule 9).
+- **Cross-platform parity, endpoints, schema:** web repo `ARCHITECTURE.md`. This cycle's changes: `BUILD LOG.md`.
 
 ## Auth
 - JWT tokens stored in AsyncStorage (`access_token`, `refresh_token`)
@@ -93,7 +105,7 @@ All require `Authorization: Bearer <token>` header.
 - `GET /api/notifications?limit=30` — user notifications
 - `POST /api/notifications/mark-read` — mark all as read
 - `GET /api/photos?visit_id=X` — list photos for a visit (JWT)
-- `POST /api/photos/upload` — upload photo; send as multipart with `file` field + `place_id` + `visit_id`
+- `POST /api/photos/upload` — upload photo via `api.uploadFile()` → expo-file-system `uploadAsync` (multipart `file`+`place_id`+`visit_id`). The New Architecture rejects fetch+FormData file parts, so do NOT use `api.upload()` for files.
 - `DELETE /api/photos/delete/<id>` — delete a photo
 
 ## Design tokens — src/constants/colors.js
@@ -148,10 +160,11 @@ Gold: #C8960C
 - `EditVisitScreen` — new screen: edit tier, occasion, notes via PATCH /api/visits/<id>/mobile
 - `EditPlaceScreen` — new screen: edit tier, category, cuisine via PATCH /api/places/user-place/<id>/mobile
 - `HomeScreen` — activity icon in header navigates to ActivityScreen
-- `LogVisitScreen` — photo picker section (max 5), deferred upload after visit save
-- `EditVisitScreen` — photo section: loads existing photos from GET /api/photos, immediate upload/delete
+- `LogVisitScreen` — multi-photo picker (no max), deferred upload after visit save (per-file partial-failure reporting)
+- `EditVisitScreen` — photo section: loads existing photos from GET /api/photos, multi-select add + immediate upload/delete
 - `ActivityScreen` — now passes `placeId` to EditVisit for photo uploads
-- `api/client.js` — added `api.upload()` for multipart form data
+- `api/client.js` — `api.uploadFile()` (expo-file-system `uploadAsync`) for file uploads; legacy `api.upload()` (fetch+FormData) is unused for files (New-Arch incompatible)
 - `SettingsScreen.js` — fixed `getExpoPushTokenAsync()` to pass `{ projectId }` from `Constants.expoConfig.extra.eas.projectId` (SDK 55 requirement); gracefully falls back to `{}` if projectId not set
-- `app.json` — added `extra.eas.projectId` field (currently empty — fill in from expo.dev or `eas project:init` to enable push tokens in production builds)
+- `app.json` — `extra.eas.projectId` is SET (EAS project linked); push tokens resolve in standalone builds
 - `App.js` — imports `expo-notifications`; `navigationRef` wired to NavigationContainer; `addNotificationResponseReceivedListener` navigates to LogVisit on `visit_reminder` tap (warm start); `getLastNotificationResponseAsync` in `onReady` handles cold start
+- `AuthContext.js` — **backfills the Expo push token on launch/login** (when OS permission is granted) via `PATCH /api/auth/push-token`, fixing already-onboarded users whose token was NULL. Onboarding + Settings also register it.
