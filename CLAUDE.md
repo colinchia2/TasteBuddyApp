@@ -39,11 +39,14 @@ eas submit --platform ios --latest    # internal TestFlight only; never submit f
 ## Auth
 - JWT tokens stored in AsyncStorage (`access_token`, `refresh_token`)
 - All API calls go through `src/api/client.js` → `apiFetch()` which auto-refreshes on 401
-- Google OAuth uses `expo-auth-session/providers/google` v7 — ⚠️ **DEAD in standalone/TestFlight builds** (the `auth.expo.io` proxy isn't supported there). Email/password login works; native-redirect rework is Phase 2.
+- **Google sign-in = native `@react-native-google-signin/google-signin` (v16.1.2)** — works in standalone/TestFlight builds. Replaced the old `expo-auth-session/providers/google` proxy flow (the `auth.expo.io` proxy was dead in standalone builds; never worked off Expo Go).
+  - `src/auth/google.js` — shared helper: `configureGoogleSignin()` (lazy, idempotent) + `signInWithGoogleAccessToken()`. Opens the native sheet, then `GoogleSignin.getTokens()` → returns the Google **access token** (not idToken) so the backend stays unchanged.
+  - All 3 entry points (`WelcomeScreen`, `LoginScreen`, `SignUpScreen`) call the shared helper → `loginWithGoogle(accessToken)` → `POST /api/auth/google`. Backend verifies via Google `userinfo?access_token=` (idToken path NOT used). Cancellation (`statusCodes.SIGN_IN_CANCELLED`) is silent.
+  - Config plugin in `app.json`: `["@react-native-google-signin/google-signin", { iosUrlScheme: "com.googleusercontent.apps.918439480148-skp68m8e98idt494ejr1h1bf14q6mh7k" }]` (reversed iOS client ID). **Native change** → needs a full EAS build + submit (NOT OTA); not testable in the old dev client / over Metro.
   - `webClientId`: 918439480148-r36km6tsj5qub0fkhe1i9j8gftod5qms.apps.googleusercontent.com
   - `iosClientId`: 918439480148-skp68m8e98idt494ejr1h1bf14q6mh7k.apps.googleusercontent.com
-  - Bundle ID: `com.colinchia.tastebuddy` (set in app.json)
-- Expo slug: `tastebuddy` (used in OAuth redirect URI: https://auth.expo.io/@colinchia2/tastebuddy)
+  - Bundle ID: `com.colinchia.tastebuddy` (the iOS OAuth client matches on this).
+  - ⚠️ Apple guideline 4.8: a *public* App Store release offering Google sign-in must also offer Sign in with Apple. Fine for internal TestFlight. `expo-auth-session` left in package.json (now unused) — prune later.
 
 ## Folder structure
 ```

@@ -76,7 +76,13 @@
           "cameraPermission": "TasteBuddy needs camera access so you can take photos of your visits."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.918439480148-skp68m8e98idt494ejr1h1bf14q6mh7k"
+        }
+      ]
     ],
     "extra": {
       "eas": {

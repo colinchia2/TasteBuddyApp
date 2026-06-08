@@ -1,18 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import * as AuthSession from 'expo-auth-session';
 import { useAuth } from '../auth/AuthContext';
+import { signInWithGoogleAccessToken, statusCodes } from '../auth/google';
 import { COLORS } from '../constants/colors';
-
-WebBrowser.maybeCompleteAuthSession();
-
-const GOOGLE_WEB_CLIENT_ID = '918439480148-r36km6tsj5qub0fkhe1i9j8gftod5qms.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID = '918439480148-skp68m8e98idt494ejr1h1bf14q6mh7k.apps.googleusercontent.com';
 
 export default function LoginScreen({ navigation }) {
   const { login, loginWithGoogle } = useAuth();
@@ -23,32 +16,16 @@ export default function LoginScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
-  console.log('[LoginScreen] Google OAuth redirectUri:', redirectUri);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
-    iosClientId: GOOGLE_IOS_CLIENT_ID,
-    redirectUri,
-  });
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const token = response.authentication?.accessToken;
-      if (token) handleGoogleToken(token);
-    } else if (response?.type === 'error') {
-      setError('Google sign-in failed. Please try again.');
-      setGoogleLoading(false);
-    }
-  }, [response]);
-
-  async function handleGoogleToken(token) {
-    setGoogleLoading(true);
+  async function startGoogle() {
     setError(null);
+    setGoogleLoading(true);
     try {
-      await loginWithGoogle(token);
+      const accessToken = await signInWithGoogleAccessToken();
+      await loginWithGoogle(accessToken);
     } catch (e) {
-      setError(e.message);
+      if (e.code !== statusCodes.SIGN_IN_CANCELLED) {
+        setError(e.message || 'Google sign-in failed. Please try again.');
+      }
     } finally {
       setGoogleLoading(false);
     }
@@ -89,8 +66,8 @@ export default function LoginScreen({ navigation }) {
         {/* Google */}
         <TouchableOpacity
           style={styles.googleBtn}
-          onPress={async () => { setError(null); setGoogleLoading(true); await promptAsync({ useProxy: true }); }}
-          disabled={!request || googleLoading || loading}
+          onPress={startGoogle}
+          disabled={googleLoading || loading}
           activeOpacity={0.82}
         >
           {googleLoading ? (
