@@ -4,8 +4,31 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // the whole response, so SSE must go through this import. Pure JS — no native
 // module — which keeps the streaming chat OTA-pushable via EAS Update.
 import { fetch as expoFetch } from 'expo/fetch';
+// Native multipart file upload. RN 0.85's New Architecture rejects fetch+FormData
+// file parts ("Unsupported Form Data Part implementation"), so photo uploads go
+// through expo-file-system's uploadAsync instead. Legacy import — the native
+// module already ships in build 3, so this stays OTA-pushable.
+import * as FileSystem from 'expo-file-system/legacy';
 
 const BASE_URL = 'https://tastebuddy-colinchia2.pythonanywhere.com';
+
+// The upload endpoint validates the filename extension; uploadAsync derives the
+// multipart filename from the file uri. expo-image-picker cache uris normally
+// carry an extension, but if one is missing/odd we copy to a .jpg cache path so
+// the server accepts it (it re-encodes to JPEG via Pillow regardless).
+const _OK_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'];
+async function _ensureUploadableUri(uri) {
+  const base = (String(uri || '').split('/').pop() || '').split('?')[0].split('#')[0];
+  const ext = base.includes('.') ? base.split('.').pop().toLowerCase() : '';
+  if (_OK_EXT.includes(ext)) return uri;
+  try {
+    const dest = `${FileSystem.cacheDirectory}tb_upload_${base || 'photo'}.jpg`;
+    await FileSystem.copyAsync({ from: uri, to: dest });
+    return dest;
+  } catch {
+    return uri;
+  }
+}
 
 async function getToken() {
   return AsyncStorage.getItem('access_token');
@@ -174,6 +197,46 @@ export const api = {
       err.need_city = !!data.need_city;
       err.need_location_confirm = !!data.need_location_confirm;
       err.location = data.location || null;
+      throw err;
+    }
+    return data;
+  },
+
+  // Multipart file upload via expo-file-system (New-Architecture-safe). `fields`
+  // become form fields; the file is sent under `file`. Mirrors api.upload's
+  // 401-refresh + structured-error behaviour.
+  async uploadFile(path, fileUri, fields = {}, retried = false) {
+    const token = await getToken();
+    const uri = await _ensureUploadableUri(fileUri);
+    const parameters = {};
+    Object.keys(fields).forEach((k) => { parameters[k] = String(fields[k]); });
+    const res = await FileSystem.uploadAsync(`${BASE_URL}${path}`, uri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'file',
+      mimeType: 'image/jpeg',
+      parameters,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.status === 401 && !retried) {
+      try {
+        await refreshAccessToken();
+        return api.uploadFile(path, fileUri, fields, true);
+      } catch {
+        await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
+        throw new Error('SESSION_EXPIRED');
+      }
+    }
+    let data;
+    try {
+      data = JSON.parse(res.body || '{}');
+    } catch {
+      throw new Error(`Server error (${res.status})`);
+    }
+    if (res.status < 200 || res.status >= 300) {
+      const err = new Error(data.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data;
       throw err;
     }
     return data;
