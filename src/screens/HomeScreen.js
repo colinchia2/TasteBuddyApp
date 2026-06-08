@@ -449,11 +449,21 @@ export default function HomeScreen({ navigation, route }) {
 
   const firstName = user?.display_name?.split(' ')[0] || 'there';
 
+  // Logo tap: while the keyboard is up, just bring it down (keep the draft + show the
+  // home content again) instead of resetting; otherwise it's the home/new-chat reset.
+  const onLogoPress = () => {
+    if (keyboardShown) {
+      Keyboard.dismiss();
+    } else {
+      resetChat();
+    }
+  };
+
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
         {/* Header — always visible, even during chat */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={resetChat} activeOpacity={0.75} style={styles.logoBtn}>
+          <TouchableOpacity onPress={onLogoPress} activeOpacity={0.75} style={styles.logoBtn}>
             <TBLogo size={40} />
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -490,9 +500,15 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Tiles — hidden when chat is active, and collapsed while typing (keyboard up)
-            so the input can grow above the keyboard without overflowing behind it. */}
-        {!chatActive && !keyboardShown && (
+        {/* Home tiles — hidden during a chat. Wrapped in a ScrollView so they stay
+            visible (scrollable) while the keyboard is up; the input bar stays pinned
+            above the keyboard rather than the tiles being cleared. */}
+        {!chatActive && (
+          <ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           <View style={styles.tilesContainer}>
             <View style={styles.tileRow}>
               {TOP_TILES.map(tile => (
@@ -523,6 +539,7 @@ export default function HomeScreen({ navigation, route }) {
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
           </View>
+          </ScrollView>
         )}
 
         {/* Chat messages */}
@@ -618,11 +635,6 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Empty flex spacer (chat NOT active) — fills the area below the tiles so
-            the whole bottom group (Chat History + suggestions + input) sinks to the
-            bottom of the screen. */}
-        {!chatActive && <View style={{ flex: 1 }} />}
-
         {/* Input bar — paddingBottom is keyboard-driven (endCoordinates), and
             drops the safe-area inset while the keyboard is visible. Chat History +
             suggestions live INSIDE this bottom-pinned block, directly above the
@@ -634,7 +646,7 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={styles.newChatText}>New chat</Text>
             </TouchableOpacity>
           )}
-          {!chatActive && !keyboardShown && (
+          {!chatActive && (
             <>
               <TouchableOpacity
                 style={styles.historyBtn}
@@ -687,7 +699,7 @@ export default function HomeScreen({ navigation, route }) {
               <Ionicons name="arrow-up" size={18} color="#fff" />
             </TouchableOpacity>
           </View>
-          {!chatActive && !keyboardShown && (
+          {!chatActive && (
             <TouchableOpacity
               onPress={() => Linking.openURL('https://tastebuddy-colinchia2.pythonanywhere.com/')}
               activeOpacity={0.7}
@@ -820,7 +832,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text,
-    paddingVertical: 8, minHeight: 24, maxHeight: 120,
+    paddingVertical: 8, minHeight: 24, maxHeight: 96,   // ~4 lines, then scrolls internally
   },
   sendBtn: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.gold,
