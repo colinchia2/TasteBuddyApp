@@ -731,6 +731,9 @@ export default function LogVisitScreen({ navigation, route }) {
               ) : null}
             </TouchableOpacity>
           </View>
+          {/* Always-visible date echo (parity with the web mm/dd/yyyy field) — stays
+              in sync with whichever chip/date is selected. */}
+          <Text style={styles.dateEcho}>{formatDateDisplay(customDate || selectedDate)}</Text>
           {showDatePicker && (
             <DateTimePicker
               value={customDate ? new Date(customDate) : new Date()}
@@ -950,7 +953,8 @@ const styles = StyleSheet.create({
   catCuisine: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted },
 
   // Chips
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  dateEcho: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginBottom: 14 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
     backgroundColor: COLORS.white, borderWidth: 0.5, borderColor: COLORS.border,
