@@ -33,6 +33,15 @@ function fmtDate(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Build a LOCAL Date from a naive 'YYYY-MM-DD' for the picker's initial value.
+// Rule 9: NEVER `new Date('YYYY-MM-DD')` (Hermes parses it as UTC and the picker
+// can open on the wrong day). Construct from local Y/M/D components instead.
+function localDateFromYMD(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
+  if (!m) return new Date();
+  return new Date(+m[1], +m[2] - 1, +m[3]);
+}
+
 function fmtMinutes(totalMins) {
   const h = Math.floor(totalMins / 60) % 24;
   const m = totalMins % 60;
@@ -149,8 +158,10 @@ export default function LogVisitScreen({ navigation, route }) {
 
   // Form state
   const [dateChips] = useState(buildDateChips);
+  // Single source of truth for the visit date (naive-local 'YYYY-MM-DD'). Chips and
+  // the calendar picker both set THIS — so the picker reflects a chip tap and the
+  // logged date always matches what's shown.
   const [selectedDate, setSelectedDate] = useState(fmtDate(new Date()));
-  const [customDate, setCustomDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedTOD, setSelectedTOD] = useState(null);
   const [timeMinutes, setTimeMinutes] = useState(nearestHour);
@@ -329,9 +340,7 @@ export default function LogVisitScreen({ navigation, route }) {
   function onDateChange(event, date) {
     setShowDatePicker(false);
     if (event.type === 'set' && date) {
-      const isoDate = fmtDate(date);
-      setCustomDate(isoDate);
-      setSelectedDate(isoDate);
+      setSelectedDate(fmtDate(date));
     }
   }
 
@@ -416,7 +425,7 @@ export default function LogVisitScreen({ navigation, route }) {
     if (occasions.length === 0) { Alert.alert('Select an occasion'); return; }
     if (!partySize) { Alert.alert('Select a party size'); return; }
 
-    const dateStr = customDate || selectedDate;
+    const dateStr = selectedDate;
     const timeStr = fmtMinutes(timeMinutes);
     const visitedAt = `${dateStr}T${timeStr}:00`;
 
@@ -526,6 +535,9 @@ export default function LogVisitScreen({ navigation, route }) {
   // logging", notification/deep-link). Clears itself once a category is added
   // (loadCategories reload → categories.length > 0). No popup when memberships exist.
   const showGate = !!placeId && catsLoaded && categories.length === 0 && !gateProceeded;
+  // Custom = the selected date isn't one of the preset chips → highlight the
+  // calendar chip and surface the date on it.
+  const dateIsCustom = !dateChips.some(c => c.date === selectedDate);
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -713,30 +725,29 @@ export default function LogVisitScreen({ navigation, route }) {
             {dateChips.map(chip => (
               <TouchableOpacity
                 key={chip.date}
-                style={[styles.chip, selectedDate === chip.date && !customDate && styles.chipActive]}
-                onPress={() => { setSelectedDate(chip.date); setCustomDate(''); }}
+                style={[styles.chip, selectedDate === chip.date && styles.chipActive]}
+                onPress={() => setSelectedDate(chip.date)}
               >
-                <Text style={[styles.chipText, selectedDate === chip.date && !customDate && styles.chipTextActive]}>
+                <Text style={[styles.chipText, selectedDate === chip.date && styles.chipTextActive]}>
                   {chip.label}
                 </Text>
               </TouchableOpacity>
             ))}
             <TouchableOpacity
-              style={[styles.chip, styles.calChip, customDate && styles.chipActive]}
+              style={[styles.chip, styles.calChip, dateIsCustom && styles.chipActive]}
               onPress={() => setShowDatePicker(true)}
             >
-              <Ionicons name="calendar-outline" size={16} color={customDate ? COLORS.gold : COLORS.textMuted} />
-              {customDate ? (
-                <Text style={[styles.chipText, styles.chipTextActive]}> {formatDateDisplay(customDate)}</Text>
+              <Ionicons name="calendar-outline" size={16} color={dateIsCustom ? COLORS.gold : COLORS.textMuted} />
+              {dateIsCustom ? (
+                <Text style={[styles.chipText, styles.chipTextActive]}> {formatDateDisplay(selectedDate)}</Text>
               ) : null}
             </TouchableOpacity>
           </View>
-          {/* Always-visible date echo (parity with the web mm/dd/yyyy field) — stays
-              in sync with whichever chip/date is selected. */}
-          <Text style={styles.dateEcho}>{formatDateDisplay(customDate || selectedDate)}</Text>
+          {/* Always-visible date echo — reflects the single source of truth. */}
+          <Text style={styles.dateEcho}>{formatDateDisplay(selectedDate)}</Text>
           {showDatePicker && (
             <DateTimePicker
-              value={customDate ? new Date(customDate) : new Date()}
+              value={localDateFromYMD(selectedDate)}
               mode="date"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               maximumDate={new Date()}
