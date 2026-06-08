@@ -49,6 +49,17 @@ const SUGGESTED_PROMPTS = [
   "What should I try next from my list?",
 ];
 
+// Pure-JS UUID v4 for conversation ids. No native module (OTA-safe — does NOT depend on
+// expo-crypto/crypto being in the binary). 122 bits of entropy → cross-user collisions
+// are negligible, unlike the old `conv-${Date.now()}` which collided on same-ms starts.
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const FOLLOW_UPS = {
   recommend:       ['Find me somewhere similar', 'What cuisines haven\'t I explored?', 'Make it more casual'],
   discover_new:    ['What\'s the best time to go?', 'Find somewhere similar', 'Any hidden gems nearby?'],
@@ -252,7 +263,10 @@ export default function HomeScreen({ navigation, route }) {
     setAwaitingFirstToken(true);
     startPhaseTimer();
 
-    const convId = conversationId || `conv-${Date.now()}`;
+    // New chats get a real UUID (was `conv-${Date.now()}`, which collided across users in
+    // the same millisecond → duplicate chat_sessions PK 500s). The server may still
+    // regenerate it on a legacy collision; we adopt the returned id below.
+    const convId = conversationId || uuidv4();
     if (!conversationId) setConversationId(convId);
 
     streamRawRef.current = '';
@@ -277,6 +291,9 @@ export default function HomeScreen({ navigation, route }) {
             if (evt.type === 'error') {
               throw new Error(evt.message || 'stream_error');
             }
+            // Adopt the server's conversation_id — it may have been regenerated on a
+            // cross-user id collision, so turn 2 must reuse the server's id, not ours.
+            if (evt.conversation_id) setConversationId(evt.conversation_id);
             if (evt.type === 'text_delta') {
               if (!bubbleAdded) {
                 // First token: kill the typing indicator and reveal the bubble.
@@ -321,6 +338,7 @@ export default function HomeScreen({ navigation, route }) {
             method: 'POST',
             body: JSON.stringify({ message: msg, conversation_id: convId }),
           });
+          if (data.conversation_id) setConversationId(data.conversation_id);
           replaceStreamingBubble(finalizedAiMessage({
             response: data.response, mode: data.mode,
             is_clarifying: data.is_clarifying, questions: data.questions,
@@ -647,9 +665,9 @@ export default function HomeScreen({ navigation, route }) {
               placeholderTextColor={COLORS.textLight}
               value={inputText}
               onChangeText={setInputText}
-              onSubmitEditing={() => sendMessage()}
-              returnKeyType="send"
-              multiline={false}
+              multiline={true}
+              textAlignVertical="top"
+              returnKeyType="default"
               autoCorrect={true}
               spellCheck={true}
               autoCapitalize="sentences"
@@ -790,13 +808,13 @@ const styles = StyleSheet.create({
   },
   newChatText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted },
   inputRow: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'flex-end',
     backgroundColor: COLORS.white, borderRadius: 24, borderWidth: 0.5,
     borderColor: COLORS.border, paddingLeft: 16, paddingRight: 6, paddingVertical: 6,
   },
   input: {
     flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text,
-    paddingVertical: 8, maxHeight: 80,
+    paddingVertical: 8, minHeight: 24, maxHeight: 120,
   },
   sendBtn: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.gold,

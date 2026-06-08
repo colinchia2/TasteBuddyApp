@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Linking } from 'react-native';
 import { COLORS } from '../constants/colors';
 
 function parseInline(text) {
   const parts = [];
-  const regex = /(\*\*([^*]+)\*\*|_([^_\n]+)_)/g;
+  // bold | italic | [text](http(s)://url) markdown link
+  const regex = /(\*\*([^*]+)\*\*|_([^_\n]+)_|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\))/g;
   let lastIndex = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
@@ -13,6 +14,8 @@ function parseInline(text) {
     }
     if (match[0].startsWith('**')) {
       parts.push({ text: match[2], bold: true, italic: false });
+    } else if (match[0].startsWith('[')) {
+      parts.push({ text: match[4], link: match[5], bold: false, italic: false });
     } else {
       parts.push({ text: match[3], bold: false, italic: true });
     }
@@ -26,21 +29,32 @@ function parseInline(text) {
 
 function InlineText({ text, style }) {
   const parts = parseInline(text);
-  if (parts.length === 1 && !parts[0].bold && !parts[0].italic) {
+  if (parts.length === 1 && !parts[0].bold && !parts[0].italic && !parts[0].link) {
     return <Text style={style}>{parts[0].text}</Text>;
   }
   return (
     <Text style={style}>
       {parts.map((p, i) => (
-        <Text
-          key={i}
-          style={[
-            p.bold && { fontFamily: 'DMSans_700Bold' },
-            p.italic && { fontStyle: 'italic' },
-          ]}
-        >
-          {p.text}
-        </Text>
+        p.link ? (
+          <Text
+            key={i}
+            style={styles.link}
+            onPress={() => Linking.openURL(p.link)}
+            suppressHighlighting={false}
+          >
+            {p.text}
+          </Text>
+        ) : (
+          <Text
+            key={i}
+            style={[
+              p.bold && { fontFamily: 'DMSans_700Bold' },
+              p.italic && { fontStyle: 'italic' },
+            ]}
+          >
+            {p.text}
+          </Text>
+        )
       ))}
     </Text>
   );
@@ -179,6 +193,7 @@ const styles = StyleSheet.create({
   bulletDot: { fontFamily: 'DMSans_700Bold', fontSize: 8, color: COLORS.gold, marginRight: 8, marginTop: 7 },
   bulletText: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, lineHeight: 22 },
   normal: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, lineHeight: 22 },
+  link: { color: COLORS.gold, textDecorationLine: 'underline' },
   table: { marginVertical: 10, borderWidth: 0.5, borderColor: COLORS.border, borderRadius: 8, overflow: 'hidden' },
   tableHeaderRow: { flexDirection: 'row', backgroundColor: COLORS.offWhite, borderBottomWidth: 1.5, borderBottomColor: COLORS.border },
   tableHeaderCell: { flex: 1, fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted, padding: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
