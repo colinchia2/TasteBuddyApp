@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
@@ -94,6 +95,13 @@ function stripPartialBlocks(text) {
   return clean;
 }
 
+// Device location for "near me / walkable" questions — mirrors the server's
+// _NEAR_ME_RE (the server only USES coords when the message carries near-me
+// intent, so sending them otherwise is harmless). The permission prompt fires
+// only for a near-me question (contextual), or the grant from Check-in /
+// Add-Place is reused silently.
+const NEAR_ME_RE = /\b(near ?me|nearby|around here|around me|close by|close to me|walking distance|walkable|near my location|where i am)\b/i;
+
 const LOADING_PHASES = [
   'Analyzing your TasteBuds…',
   'Spoonfeeding the Model…',
@@ -130,6 +138,7 @@ export default function HomeScreen({ navigation, route }) {
   const flushTimerRef = useRef(null);
   const streamAbortRef = useRef(null);
   const autoScrollRef = useRef(false);
+  const coordsRef = useRef(null);   // last device fix for near-me asks
 
   useEffect(() => {
     if (chatActive && scrollRef.current) {
@@ -153,7 +162,36 @@ export default function HomeScreen({ navigation, route }) {
         if (Array.isArray(d?.prompts) && d.prompts.length) setSuggestedPrompts(d.prompts);
       })
       .catch(() => {});
+    // Warm the coords cache silently — NO permission prompt here (Home is the
+    // root screen); only reuse a grant Check-in / Add-Place already obtained.
+    Location.getForegroundPermissionsAsync()
+      .then(async ({ status }) => {
+        if (status !== 'granted') return;
+        const last = await Location.getLastKnownPositionAsync();
+        if (last) coordsRef.current = { lat: last.coords.latitude, lng: last.coords.longitude };
+      })
+      .catch(() => {});
   }, []));
+
+  // Near-me question → make sure we have a real fix: prompt for permission if
+  // needed (contextual — the user just asked about "nearby"), then take a fresh
+  // Balanced-accuracy reading, capped at 4s so the ask never hangs on GPS.
+  async function ensureCoords(msg) {
+    if (!NEAR_ME_RE.test(msg)) return coordsRef.current;
+    try {
+      let { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        ({ status } = await Location.requestForegroundPermissionsAsync());
+      }
+      if (status !== 'granted') return coordsRef.current;
+      const pos = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise((resolve) => setTimeout(() => resolve(null), 4000)),
+      ]);
+      if (pos) coordsRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    } catch {}
+    return coordsRef.current;
+  }
 
   // Handle continuing a session from ChatHistoryScreen
   useEffect(() => {
@@ -290,6 +328,9 @@ export default function HomeScreen({ navigation, route }) {
     const convId = conversationId || uuidv4();
     if (!conversationId) setConversationId(convId);
 
+    // Near-me asks block briefly (≤4s) on a GPS fix; loading UI is already up.
+    const coords = await ensureCoords(msg);
+
     streamRawRef.current = '';
     autoScrollRef.current = true;
     const controller = new AbortController();
@@ -305,7 +346,10 @@ export default function HomeScreen({ navigation, route }) {
 
     try {
       await api.stream('/api/ask/chat/stream',
-        { message: msg, conversation_id: convId },
+        {
+          message: msg, conversation_id: convId,
+          lat: coords ? coords.lat : null, lng: coords ? coords.lng : null,
+        },
         {
           signal: controller.signal,
           onEvent: (evt) => {
@@ -357,7 +401,10 @@ export default function HomeScreen({ navigation, route }) {
         try {
           const data = await api.json('/api/ask/chat', {
             method: 'POST',
-            body: JSON.stringify({ message: msg, conversation_id: convId }),
+            body: JSON.stringify({
+              message: msg, conversation_id: convId,
+              lat: coords ? coords.lat : null, lng: coords ? coords.lng : null,
+            }),
           });
           if (data.conversation_id) setConversationId(data.conversation_id);
           replaceStreamingBubble(finalizedAiMessage({
