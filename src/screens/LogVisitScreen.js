@@ -328,11 +328,28 @@ export default function LogVisitScreen({ navigation, route }) {
       return;
     }
     // Google-only place not in your list → mirror the app's add-then-log: route
-    // into Add a Place (confirm-location / resolve_city). Its existing post-add
-    // flow continues into Log a Visit and runs pairwise for an S-tier.
+    // into Add a Place (confirm-location / resolve_city). continueToLogVisit
+    // bridges straight back here with the new place_id after the add — same as
+    // the web LV→AddPlace→LV flow (no "Did you visit?" detour).
     navigation.navigate('AddPlace', {
       googlePlaceId: item.google_place_id,
       placeName: item.name,
+      continueToLogVisit: true,
+      checkinId: paramCheckinId,
+      fromActionCard: paramFromActionCard,
+    });
+  }
+
+  // Web parity: the LV search's "Can't find it? Add it manually" link → Add a
+  // Place opens directly in manual-entry mode, prefilled with the query, then
+  // bridges back here with the new place_id.
+  function openManualAdd() {
+    navigation.navigate('AddPlace', {
+      startManual: true,
+      placeName: searchQuery.trim(),
+      continueToLogVisit: true,
+      checkinId: paramCheckinId,
+      fromActionCard: paramFromActionCard,
     });
   }
 
@@ -518,6 +535,9 @@ export default function LogVisitScreen({ navigation, route }) {
                 <Text style={styles.resultMeta}>{item.address || item.category || item.cuisine || ''}</Text>
               </TouchableOpacity>
             ))}
+            <TouchableOpacity style={styles.manualAddLink} onPress={openManualAdd}>
+              <Text style={styles.manualAddLinkText}>Can't find it? Add it manually</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -934,6 +954,8 @@ const styles = StyleSheet.create({
   savedBadgeText: { fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#fff' },
   resultName: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text },
   resultMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  manualAddLink: { paddingVertical: 12, alignItems: 'center' },
+  manualAddLinkText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.gold },
 
   // Place header
   placeCard: {

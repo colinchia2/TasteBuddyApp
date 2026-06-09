@@ -142,6 +142,11 @@ export default function AddPlaceScreen({ navigation, route }) {
   const prefillGoogleId = route?.params?.googlePlaceId || '';
   const onDone = route?.params?.onDone;
   const fromActionCard = route?.params?.fromActionCard || null;
+  // LV→AddPlace→LV bridge (web parity): open straight into manual entry and/or
+  // return to Log a Visit with the new place_id after the add.
+  const startManual = !!route?.params?.startManual;
+  const continueToLogVisit = !!route?.params?.continueToLogVisit;
+  const bridgeCheckinId = route?.params?.checkinId || null;
 
   const [step, setStep] = useState(1);
   const [query, setQuery] = useState(prefillName);
@@ -183,6 +188,9 @@ export default function AddPlaceScreen({ navigation, route }) {
     if (prefillGoogleId && prefillName) {
       setSelectedPlace({ google_place_id: prefillGoogleId, name: prefillName });
       setStep(2);
+    } else if (startManual) {
+      setManualName(prefillName);
+      setManualMode(true);
     }
   }, []);
 
@@ -370,6 +378,23 @@ export default function AddPlaceScreen({ navigation, route }) {
       });
 
       const isRankedTier = ['S', 'A', 'B', 'C'].includes(tier);
+
+      if (continueToLogVisit) {
+        // Bridge back to Log a Visit with the freshly-created place (web's
+        // LV→AddPlace→LV flow). fromActionCard rides through so LogVisit
+        // completes the action card after the visit saves; pairwise (if any)
+        // runs after the visit via afterSaveNav, same as the alert path below.
+        navigation.replace('LogVisit', {
+          placeId: data.place_id,
+          placeName: selectedPlace.name,
+          checkinId: bridgeCheckinId,
+          fromActionCard,
+          afterSaveNav: data.pairwise_data
+            ? { screen: 'Pairwise', params: { newId: data.pairwise_data.new_id, category: data.pairwise_data.category } }
+            : null,
+        });
+        return;
+      }
 
       if (fromActionCard) {
         navigation.navigate('Home', { actionCompleted: fromActionCard });
