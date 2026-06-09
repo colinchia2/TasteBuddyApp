@@ -42,6 +42,9 @@ const TOP_TILES = [
   },
 ];
 
+// Offline/error fallback only — the live chips come from GET /api/ask/suggestions
+// (same personalized builder as the web /ask page, so both platforms show
+// identical text).
 const SUGGESTED_PROMPTS = [
   "What's my best pick for a special night out?",
   "Find me a new neighborhood spot I haven't tried",
@@ -117,6 +120,7 @@ export default function HomeScreen({ navigation, route }) {
   const [conversationId, setConversationId] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
   const [unreadNotifs, setUnreadNotifs] = useState(0);   // bell badge — same count as web
+  const [suggestedPrompts, setSuggestedPrompts] = useState(SUGGESTED_PROMPTS);
   const scrollRef = useRef(null);
   const chatInputRef = useRef(null);
   const phaseTimerRef = useRef(null);
@@ -140,6 +144,14 @@ export default function HomeScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => {
     api.json('/api/notifications/unread-count')
       .then(d => setUnreadNotifs(d?.count || 0))
+      .catch(() => {});
+    // Personalized pre-ask chips — refetched on focus (the app equivalent of the
+    // web /ask page rebuilding them per page load). Falls back to the hardcoded
+    // list on any error.
+    api.json('/api/ask/suggestions')
+      .then(d => {
+        if (Array.isArray(d?.prompts) && d.prompts.length) setSuggestedPrompts(d.prompts);
+      })
       .catch(() => {});
   }, []));
 
@@ -233,11 +245,17 @@ export default function HomeScreen({ navigation, route }) {
     // (NOT generic follow-up chips, which fired literal text and looped).
     const clarifyQuestions = (evt.is_clarifying && Array.isArray(evt.questions) && evt.questions.length)
       ? evt.questions : null;
+    // Prefer the server's AI-generated followups (---FOLLOWUPS--- block, already
+    // in stream_end as `followups` — same chips the web renders); the hardcoded
+    // mode lookup is only the fallback when the model emitted none.
+    const serverFollowUps = Array.isArray(evt.followups)
+      ? evt.followups.filter(f => typeof f === 'string' && f.trim()).slice(0, 3)
+      : [];
     return {
       role: 'ai',
       text: evt.response || streamRawRef.current || 'No response received.',
       clarifyQuestions,
-      followUps: clarifyQuestions ? [] : getFollowUps(evt.mode),
+      followUps: clarifyQuestions ? [] : (serverFollowUps.length ? serverFollowUps : getFollowUps(evt.mode)),
       actions: evt.actions || [],
       streaming: false,
     };
@@ -346,6 +364,7 @@ export default function HomeScreen({ navigation, route }) {
             response: data.response, mode: data.mode,
             is_clarifying: data.is_clarifying, questions: data.questions,
             actions: data.actions || [],
+            followups: data.followups || [],
           }));
           return;
         } catch (fbErr) {
@@ -663,7 +682,7 @@ export default function HomeScreen({ navigation, route }) {
                 contentContainerStyle={styles.suggestionsContent}
                 keyboardShouldPersistTaps="handled"
               >
-                {SUGGESTED_PROMPTS.map((prompt, i) => (
+                {suggestedPrompts.map((prompt, i) => (
                   <TouchableOpacity
                     key={i}
                     style={styles.suggestChip}

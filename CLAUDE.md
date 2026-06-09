@@ -19,7 +19,7 @@ Flask app lives at: `C:\Users\colin\OneDrive\Documents\Python\TasteBuddy`
 npx expo start --dev-client --tunnel
 npx expo whoami                       # should return: colinchia2
 
-# OTA — the DEFAULT deploy for app-JS changes (build 3 on TestFlight, fingerprint runtime 36f21ad4…):
+# OTA — the DEFAULT deploy for app-JS changes (build 4 on TestFlight, fingerprint runtime 47b1428…):
 eas update --branch production --message "..." --environment production
 #   Pull on device: open → wait ~15s → fully quit → reopen.
 #   OTA only works for pure-JS changes. NEW native dep / SDK bump / permissions / icon / app.json
