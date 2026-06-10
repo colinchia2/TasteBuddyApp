@@ -73,6 +73,21 @@ export default function MyPlacesScreen({ navigation }) {
             </View>
           ) : (
             <>
+              {/* Straight to the combined view — Rankings with no params renders
+                  "All Categories" (selCats = []), same as clearing the category
+                  filter from inside any single category. */}
+              <TouchableOpacity
+                style={styles.allBtn}
+                activeOpacity={0.82}
+                onPress={() => navigation.navigate('Rankings', {})}
+              >
+                <View style={styles.tileIconWrap}>
+                  <Ionicons name="albums-outline" size={20} color={COLORS.gold} />
+                </View>
+                <Text style={styles.allBtnText}>See All Categories</Text>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+
               {data.primary.length > 0 ? (
                 <Text style={styles.sectionLabel}>{SECTION_LABELS.primary}</Text>
               ) : null}
@@ -148,6 +163,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10,
   },
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 10, marginHorizontal: 4 },
+  // "See All Categories" — tile styling (same bg/border/radius), row layout.
+  allBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: COLORS.border,
+    padding: 16,
+    marginBottom: 16,
+  },
+  allBtnText: { flex: 1, fontFamily: 'Outfit_700Bold', fontSize: 17, color: COLORS.text },
   tile: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
