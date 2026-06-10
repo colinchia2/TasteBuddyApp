@@ -72,6 +72,9 @@ const FOLLOW_UPS = {
   food_crawl:      ['Which stop should I hit first?', 'Make it a longer crawl', 'Any drink spots to add?'],
   organize_nextup: ['What\'s been on my list longest?', 'Find me something new to add', 'Which ones are S-tier worthy?'],
   log_visit:       ['How does that compare to my S-tier?', 'What should I try next?', 'Find somewhere similar'],
+  // No chips after a reminder confirmation — the action card is the next step;
+  // generic discovery chips there are noise (server skips ---FOLLOWUPS--- too).
+  set_reminder:    [],
   default:         ['Find me somewhere new to try', 'What cuisines haven\'t I explored?', 'What\'s my S-tier list?'],
 };
 
