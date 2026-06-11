@@ -64,7 +64,8 @@ export default function PersonaProfileScreen({ navigation, route }) {
   }
 
   const { identity, tastie, micro_stats, top_cuisines, top_categories,
-          top_places, recent_checkins, highlights, ai_chips, taste_dna } = profile;
+          top_places, recent_checkins, recent_photos = [], highlights,
+          ai_chips, taste_dna } = profile;
   const first = (identity.display_name || '').split(' ')[0];
 
   const askWithPrompt = (prompt) =>
@@ -87,9 +88,12 @@ export default function PersonaProfileScreen({ navigation, route }) {
             {identity.vibe_tag ? <Text style={styles.vibe}>{identity.vibe_tag}</Text> : null}
             {/* TAGLINE SLOT — intentionally empty. The Hero prompt fills this
                 with the archetype headline + AI subtitle. Do not add content. */}
-            <View style={styles.scoreSeal}>
-              <Text style={styles.scoreNumber}>{tastie.score}</Text>
-              <Text style={styles.scoreLabel}>{tastie.label}</Text>
+            {/* Score medallion — circular gold prestige badge (dashed inner
+                ring). Flat fill ≈ the web radial gradient (no gradient lib). */}
+            <View style={styles.medallion}>
+              <View style={styles.medallionRing} />
+              <Text style={styles.medallionNum}>{tastie.score}</Text>
+              <Text style={styles.medallionLabel} numberOfLines={2}>{tastie.label}</Text>
             </View>
             <View style={styles.statsRow}>
               {[['Visits', micro_stats.visits], ['Places', micro_stats.places],
@@ -141,45 +145,53 @@ export default function PersonaProfileScreen({ navigation, route }) {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Top Places</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {top_places.map((tp) => (
-                <View key={tp.slug} style={styles.placeCard}>
+              {top_places.map((tp) => {
+                const tc = TIER_COLORS[tp.tier] || { bg: COLORS.tierTBE, text: COLORS.tierTBEText };
+                return (
+                <View key={tp.slug} style={[styles.placeCard, { backgroundColor: tc.bg }]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <TierBadge tier={tp.tier} label={tp.tier_label} />
-                    <Text style={styles.placeContext} numberOfLines={1}>{tp.context}</Text>
+                    <View style={styles.placeTierSquare}>
+                      <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 12, color: tc.text }}>{tp.tier_label}</Text>
+                    </View>
+                    <Text style={[styles.placeContext, { color: tc.text }]} numberOfLines={1}>{tp.context}</Text>
                   </View>
-                  <Text style={styles.placeName} numberOfLines={2}>{tp.name}</Text>
-                  <Text style={styles.placeMeta} numberOfLines={1}>
+                  <Text style={[styles.placeName, { color: tc.text }]} numberOfLines={2}>{tp.name}</Text>
+                  <Text style={[styles.placeMeta, { color: tc.text }]} numberOfLines={1}>
                     {tp.category || '—'}{tp.cuisine ? ` · ${tp.cuisine}` : ''}
                   </Text>
                 </View>
-              ))}
+                );
+              })}
             </ScrollView>
           </View>
         ) : null}
 
-        {/* Recent Check-ins — visits-sourced; dates are pre-formatted strings (Rule 9) */}
+        {/* Recent Check-ins — photo carousel up top, then a clean bulleted log
+            (no photos interleaved). Dates are pre-formatted strings (Rule 9). */}
         {recent_checkins.length ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Recent Check-ins</Text>
-            {recent_checkins.map((ci, i) => (
-              <View key={`${ci.slug}-${i}`}
-                    style={[styles.checkinRow, i < recent_checkins.length - 1 && styles.rowBorder]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <TierBadge tier={ci.tier} label={ci.tier_label} small />
-                  <Text style={styles.checkinPlace} numberOfLines={1}>{ci.place_name}</Text>
-                  <Text style={styles.checkinDate}>
+            {recent_photos.length ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 6 }}>
+                {recent_photos.map((ph, i) => (
+                  <Image key={`${ph.url}-${i}`} source={{ uri: absUrl(ph.url) }} style={styles.recentPhoto} />
+                ))}
+              </ScrollView>
+            ) : null}
+            {recent_checkins.map((ci, i) => {
+              const tc = TIER_COLORS[ci.tier] || { bg: COLORS.tierTBE, text: COLORS.tierTBEText };
+              return (
+                <View key={`${ci.slug}-${i}`} style={[styles.visitRow, i > 0 && styles.visitRowBorder]}>
+                  <View style={[styles.visitTierSquare, { backgroundColor: tc.bg }]}>
+                    <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 12, color: tc.text }}>{ci.tier_label}</Text>
+                  </View>
+                  <Text style={styles.visitName} numberOfLines={1}>{ci.place_name}</Text>
+                  <Text style={styles.visitMeta}>
                     {ci.date_str}{ci.meal_period ? ` · ${ci.meal_period}` : ''}
                   </Text>
                 </View>
-                {ci.photos.length ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                    {ci.photos.map((url) => (
-                      <Image key={url} source={{ uri: absUrl(url) }} style={styles.checkinPhoto} />
-                    ))}
-                  </ScrollView>
-                ) : null}
-              </View>
-            ))}
+              );
+            })}
           </View>
         ) : null}
 
@@ -201,18 +213,23 @@ export default function PersonaProfileScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {/* Ask AI — chips + primary button (always logged in on app) */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Ask {first}'s AI</Text>
-          <View style={styles.pillWrap}>
+        {/* Ask AI — dark/gold destination at the bottom (the payoff). Flat dark
+            fill ≈ the web gradient. Chips + button behavior unchanged. */}
+        <View style={styles.aiCard}>
+          <Text style={styles.aiTitle}>Ask {first}'s AI</Text>
+          <Text style={styles.aiSub}>
+            It knows all {micro_stats.visits} of {first}'s visits and rankings. Ask it like you'd ask {first}.
+          </Text>
+          <View style={{ gap: 9, marginBottom: 16 }}>
             {ai_chips.map((chip) => (
-              <TouchableOpacity key={chip} style={styles.chip} onPress={() => askWithPrompt(chip)}>
-                <Text style={styles.chipText}>{chip}</Text>
+              <TouchableOpacity key={chip} style={styles.aiChip} onPress={() => askWithPrompt(chip)}>
+                <Text style={styles.aiChipSparkle}>✦</Text>
+                <Text style={styles.aiChipText}>{chip}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity style={styles.askBtn} onPress={() => askWithPrompt('')}>
-            <Text style={styles.askBtnText}>Ask {first}'s AI anything</Text>
+          <TouchableOpacity style={styles.aiBtn} onPress={() => askWithPrompt('')}>
+            <Text style={styles.aiBtnText}>Ask {first}'s AI anything</Text>
           </TouchableOpacity>
         </View>
 
@@ -235,11 +252,18 @@ const styles = StyleSheet.create({
   heroName: { fontFamily: 'Outfit_700Bold', fontSize: 22, color: COLORS.text, marginTop: 8 },
   vibe: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted,
           fontStyle: 'italic', marginTop: 2 },
-  scoreSeal: { backgroundColor: COLORS.goldLight, borderRadius: 14, paddingHorizontal: 24,
-               paddingVertical: 10, alignItems: 'center', marginTop: 12 },
-  scoreNumber: { fontFamily: 'Outfit_700Bold', fontSize: 28, color: COLORS.gold, lineHeight: 32 },
-  scoreLabel: { fontFamily: 'DMSans_700Bold', fontSize: 10, color: '#9b7b22',
-                textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 2 },
+  medallion: { width: 104, height: 104, borderRadius: 52, marginTop: 14,
+               backgroundColor: COLORS.personaMedallion, alignItems: 'center',
+               justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(200,150,12,0.25)',
+               shadowColor: '#C8960C', shadowOpacity: 0.18, shadowRadius: 10,
+               shadowOffset: { width: 0, height: 6 } },
+  medallionRing: { position: 'absolute', top: 8, left: 8, right: 8, bottom: 8,
+                   borderRadius: 44, borderWidth: 1.5, borderStyle: 'dashed',
+                   borderColor: 'rgba(200,150,12,0.40)' },
+  medallionNum: { fontFamily: 'Outfit_700Bold', fontSize: 32, lineHeight: 34, color: COLORS.gold },
+  medallionLabel: { fontFamily: 'Outfit_700Bold', fontSize: 9, letterSpacing: 0.7,
+                    textTransform: 'uppercase', color: COLORS.personaMedallionLabel,
+                    marginTop: 2, maxWidth: 86, textAlign: 'center' },
   statsRow: { flexDirection: 'row', gap: 26, marginTop: 14 },
   statVal: { fontFamily: 'Outfit_700Bold', fontSize: 18, color: COLORS.text },
   statLabel: { fontFamily: 'DMSans_700Bold', fontSize: 9, color: COLORS.textLight,
@@ -248,25 +272,31 @@ const styles = StyleSheet.create({
   pill: { borderRadius: 20, paddingHorizontal: 13, paddingVertical: 5 },
   pillText: { fontFamily: 'DMSans_500Medium', fontSize: 13 },
   emptyText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textLight },
-  placeCard: { width: 190, borderRadius: 10, borderWidth: 0.5, borderColor: COLORS.borderLight,
-               backgroundColor: COLORS.offWhite, padding: 12, marginRight: 10 },
-  placeContext: { fontFamily: 'DMSans_400Regular', fontSize: 10, color: COLORS.textLight,
-                  flexShrink: 1, marginLeft: 6 },
-  placeName: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text },
-  placeMeta: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textMuted, marginTop: 3 },
-  checkinRow: { paddingVertical: 10 },
-  rowBorder: { borderBottomWidth: 0.5, borderColor: COLORS.borderLight },
-  checkinPlace: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text, flexShrink: 1 },
-  checkinDate: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight,
-                 marginLeft: 'auto' },
-  checkinPhoto: { width: 96, height: 72, borderRadius: 8, marginRight: 8 },
+  placeCard: { width: 168, borderRadius: 14, padding: 13, marginRight: 10 },
+  placeTierSquare: { width: 24, height: 24, borderRadius: 7, backgroundColor: '#fff',
+                     alignItems: 'center', justifyContent: 'center' },
+  placeContext: { fontFamily: 'DMSans_400Regular', fontSize: 10, opacity: 0.7,
+                  flexShrink: 1, marginLeft: 6, textAlign: 'right' },
+  placeName: { fontFamily: 'Outfit_700Bold', fontSize: 15, marginTop: 2 },
+  placeMeta: { fontFamily: 'DMSans_400Regular', fontSize: 11, opacity: 0.75, marginTop: 3 },
+  recentPhoto: { width: 108, height: 108, borderRadius: 13, marginRight: 8 },
+  visitRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11 },
+  visitRowBorder: { borderTopWidth: 0.5, borderColor: COLORS.borderLight },
+  visitTierSquare: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  visitName: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text, flexShrink: 1 },
+  visitMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textLight, marginLeft: 'auto' },
   highlightPhoto: { width: 150, height: 110, borderRadius: 10 },
   highlightCaption: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textMuted,
                       flexShrink: 1 },
-  chip: { borderWidth: 1.5, borderColor: COLORS.gold, borderRadius: 20,
-          paddingHorizontal: 14, paddingVertical: 8, backgroundColor: COLORS.white },
-  chipText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.tierSText },
-  askBtn: { backgroundColor: COLORS.gold, borderRadius: 20, paddingVertical: 11,
-            alignItems: 'center', marginTop: 14 },
-  askBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.white },
+  aiCard: { backgroundColor: COLORS.personaAiDark, borderRadius: 16, padding: 22,
+            marginHorizontal: 14, marginTop: 12 },
+  aiTitle: { fontFamily: 'Outfit_700Bold', fontSize: 19, color: '#fff', marginBottom: 4 },
+  aiSub: { fontFamily: 'DMSans_400Regular', fontSize: 12.5, color: COLORS.personaAiSub,
+           lineHeight: 18, marginBottom: 14 },
+  aiChip: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 15,
+            paddingVertical: 13, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.07)' },
+  aiChipSparkle: { color: COLORS.gold, fontSize: 14 },
+  aiChipText: { fontFamily: 'DMSans_500Medium', fontSize: 13.5, color: '#fff', flex: 1 },
+  aiBtn: { backgroundColor: COLORS.gold, borderRadius: 13, paddingVertical: 14, alignItems: 'center' },
+  aiBtnText: { fontFamily: 'Outfit_700Bold', fontSize: 15, color: '#fff' },
 });

@@ -12,6 +12,17 @@ import { useAuth } from '../auth/AuthContext';
 import { COLORS } from '../constants/colors';
 import { api } from '../api/client';
 
+// Type filter chips — ports web /personas exactly (keys = PersonaTypeEnum values
+// the /api/personas payload returns in `type`).
+const TYPE_CHIPS = [
+  { key: 'all', label: 'All' },
+  { key: 'original', label: 'TasteBuddy Originals' },
+  { key: 'chef', label: 'Chefs' },
+  { key: 'food_media', label: 'Food Media' },
+  { key: 'friend', label: 'Friends' },
+  { key: 'custom', label: 'User Created' },
+];
+
 export default function PersonasBrowseScreen({ navigation }) {
   const { user } = useAuth();
   const [personas, setPersonas] = useState([]);
@@ -19,6 +30,7 @@ export default function PersonasBrowseScreen({ navigation }) {
   const [lookupName, setLookupName] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
   const [busy, setBusy] = useState({});   // persona_id → toggling
+  const [filter, setFilter] = useState('all');   // type filter chip
 
   const load = useCallback(() => {
     api.json('/api/personas')
@@ -57,12 +69,15 @@ export default function PersonasBrowseScreen({ navigation }) {
     }
   }
 
+  const shown = filter === 'all' ? personas : personas.filter((p) => p.type === filter);
+
   return (
     <View style={styles.container}>
       <ScreenHeader title="Tastie Personas" navigation={navigation} />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
-        {/* Your own persona + name lookup */}
+        {/* Zone A — Your Persona (tap → your own profile) */}
+        <Text style={styles.sectionLabel}>Your Persona</Text>
         <View style={styles.card}>
           <TouchableOpacity style={styles.selfRow}
             onPress={() => navigation.navigate('PersonaProfile', { userId: user?.id })}>
@@ -75,7 +90,20 @@ export default function PersonasBrowseScreen({ navigation }) {
             </View>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
-          <View style={styles.lookupRow}>
+        </View>
+
+        {/* Zone B — Saved. Population needs the Prompt 5 follow graph; the empty
+            state is the correct render for now. */}
+        <Text style={styles.sectionLabel}>Saved</Text>
+        <View style={styles.card}>
+          <Text style={styles.savedEmpty}>No saved Personas yet.</Text>
+          <Text style={styles.savedEmptySub}>Personas you add will show up here.</Text>
+        </View>
+
+        {/* Zone C — find a friend's Persona by name */}
+        <Text style={styles.sectionLabel}>Find a Persona</Text>
+        <View style={styles.card}>
+          <View style={[styles.lookupRow, { marginTop: 0 }]}>
             <TextInput
               style={styles.lookupInput}
               placeholder="View a friend's Persona by name…"
@@ -94,13 +122,27 @@ export default function PersonasBrowseScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Curated personas (existing follow system) */}
+        {/* Curated personas (existing follow system) + type filter chips */}
         <Text style={styles.sectionLabel}>Curated Tastie Personas</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipBar}>
+          {TYPE_CHIPS.map((c) => {
+            const on = filter === c.key;
+            return (
+              <TouchableOpacity key={c.key} onPress={() => setFilter(c.key)}
+                style={[styles.typeChip, on && styles.typeChipOn]}>
+                <Text style={[styles.typeChipText, on && styles.typeChipTextOn]}>{c.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
         {loading ? (
           <ActivityIndicator size="large" color={COLORS.gold} style={{ marginTop: 30 }} />
-        ) : personas.length === 0 ? (
-          <Text style={styles.emptyText}>No Tastie Personas yet.</Text>
-        ) : personas.map((p) => (
+        ) : shown.length === 0 ? (
+          <Text style={styles.emptyText}>
+            {filter === 'all' ? 'No Tastie Personas yet.' : 'None in this category.'}
+          </Text>
+        ) : shown.map((p) => (
           <View key={p.id} style={styles.card}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1, paddingRight: 10 }}>
@@ -154,6 +196,14 @@ const styles = StyleSheet.create({
   lookupBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: '#fff' },
   emptyText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textLight,
                textAlign: 'center', marginTop: 30 },
+  savedEmpty: { fontFamily: 'DMSans_700Bold', fontSize: 13.5, color: COLORS.textMuted },
+  savedEmptySub: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textLight, marginTop: 3 },
+  chipBar: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 2, gap: 8 },
+  typeChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+              backgroundColor: COLORS.white, borderWidth: 0.5, borderColor: COLORS.border },
+  typeChipOn: { backgroundColor: COLORS.text, borderColor: COLORS.text },
+  typeChipText: { fontFamily: 'DMSans_500Medium', fontSize: 12.5, color: COLORS.textMuted },
+  typeChipTextOn: { color: '#fff' },
   personaName: { fontFamily: 'Outfit_700Bold', fontSize: 16, color: COLORS.text },
   personaVibe: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted,
                  fontStyle: 'italic', marginTop: 1 },

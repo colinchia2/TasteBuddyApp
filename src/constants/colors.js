@@ -33,6 +33,14 @@ export const COLORS = {
   // Taste DNA radar — must match design_tokens.css (--dna-radar-grid / --dna-radar-ink)
   dnaRadarGrid: '#ECE8E0',
   dnaRadarInk: '#1C1A17',
+
+  // Tastie Persona decorative — must match design_tokens.css (--persona-*).
+  // App has no gradient lib, so these are flat approximations of the web
+  // gradients (medallion = warm gold, Ask-AI block = dark warm).
+  personaMedallion: '#F6E3B8',     // flat fill ≈ the web medallion radial
+  personaMedallionLabel: '#9A7212',
+  personaAiDark: '#2E271D',        // flat ≈ the web Ask-AI dark gradient
+  personaAiSub: '#D7CBB4',
 };
 
 export const TIER_COLORS = {

@@ -31,11 +31,16 @@ export default function TasteDnaRadar({ dna, size = 320 }) {
     axes.map((_, i) => pt(i, frac).join(',')).join(' ');
   const dataPts = axes.map((a, i) => pt(i, a.value / 100));
 
-  // Lean line: the two axes furthest from 50, named by the pole they lean to.
-  const ranked = [...axes].sort((a, b) => Math.abs(b.value - 50) - Math.abs(a.value - 50));
-  const leans = ranked.slice(0, 2)
-    .filter((a) => Math.abs(a.value - 50) >= 5)
-    .map((a) => (a.value >= 50 ? a.pole_a : a.pole_b).toLowerCase());
+  // Lean line is built server-side (shared with web) — render dna.lean_line.
+  // Fallback keeps an older payload working until the OTA lands.
+  let leanLine = dna.lean_line;
+  if (!leanLine) {
+    const ranked = [...axes].sort((a, b) => Math.abs(b.value - 50) - Math.abs(a.value - 50));
+    const leans = ranked.slice(0, 2)
+      .filter((a) => Math.abs(a.value - 50) >= 5)
+      .map((a) => (a.value >= 50 ? a.pole_a : a.pole_b).toLowerCase());
+    leanLine = leans.length ? `Leans ${leans.join(' and ')}` : 'Balanced across the board.';
+  }
 
   return (
     <View style={{ alignItems: 'center' }}>
@@ -49,30 +54,27 @@ export default function TasteDnaRadar({ dna, size = 320 }) {
         })}
         <Polygon
           points={dataPts.map((p) => p.join(',')).join(' ')}
-          fill={GOLD} fillOpacity={0.18} stroke={GOLD} strokeWidth={2.5} strokeLinejoin="round"
+          fill={GOLD} fillOpacity={0.22} stroke={GOLD} strokeWidth={2.5} strokeLinejoin="round"
         />
         {dataPts.map((p, i) => (
           <Circle key={`d${i}`} cx={p[0]} cy={p[1]} r={4} fill={GOLD} />
         ))}
+        {/* Rim labels ONLY (pole_a at the vertices). The inner grey pole_b
+            labels were dropped (decluttered) — the bipolar read now lives in the
+            lean line below. Mirrors the web SVG renderer. */}
         {axes.map((a, i) => {
           const ang = -Math.PI / 2 + (2 * Math.PI * i) / n;
           const ax = CX + (R + 22) * Math.cos(ang);
           const ay = CY + (R + 22) * Math.sin(ang);
-          const bx = CX + 28 * Math.cos(ang);
-          const by = CY + 28 * Math.sin(ang);
           const anchor = Math.abs(Math.cos(ang)) < 0.3 ? 'middle' : (Math.cos(ang) > 0 ? 'start' : 'end');
           return (
-            <React.Fragment key={`l${i}`}>
-              <SvgText x={ax} y={ay + 4} textAnchor={anchor} fontSize={11}
-                       fontFamily="DMSans_700Bold" fill={INK}>{a.pole_a}</SvgText>
-              <SvgText x={bx} y={by + 3} textAnchor={anchor} fontSize={8}
-                       fontFamily="DMSans_400Regular" fill="#B8B4AC">{a.pole_b}</SvgText>
-            </React.Fragment>
+            <SvgText key={`l${i}`} x={ax} y={ay + 4} textAnchor={anchor} fontSize={11}
+                     fontFamily="DMSans_700Bold" fill={INK}>{a.pole_a}</SvgText>
           );
         })}
       </Svg>
       <Text style={{ fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#444', marginTop: 2 }}>
-        {leans.length ? `Strong on ${leans.join(' and ')}.` : 'Balanced across the board.'}
+        {leanLine}
       </Text>
       {dna.low_confidence ? (
         <Text style={{ fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight, marginTop: 2 }}>
