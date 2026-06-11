@@ -29,6 +29,10 @@ export const COLORS = {
   pillCatText: '#042C53',
   pillCuiBg: '#B4B2A9',
   pillCuiText: '#2C2C2A',
+
+  // Taste DNA radar — must match design_tokens.css (--dna-radar-grid / --dna-radar-ink)
+  dnaRadarGrid: '#ECE8E0',
+  dnaRadarInk: '#1C1A17',
 };
 
 export const TIER_COLORS = {

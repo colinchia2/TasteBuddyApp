@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
   ScrollView, Switch, ActivityIndicator,
@@ -6,6 +6,7 @@ import {
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import ScreenHeader from '../components/ScreenHeader';
+import TasteDnaRadar from '../components/TasteDnaRadar';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import { COLORS } from '../constants/colors';
@@ -15,6 +16,19 @@ export default function SettingsScreen({ navigation }) {
   const [pushEnabled, setPushEnabled] = useState(user?.push_notifications_enabled || false);
   const [profilePublic, setProfilePublic] = useState(user?.profile_public || false);
   const [savingPublic, setSavingPublic] = useState(false);
+  // Taste DNA — same shared endpoint as the web profile radar; the JWT bearer
+  // makes it self-gated, so it works even while the profile is private.
+  const [dna, setDna] = useState(null);
+  const [dnaLoading, setDnaLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    if (!user?.id) { setDnaLoading(false); return; }
+    api.json(`/api/persona/${user.id}/taste-dna`)
+      .then((d) => { if (alive) setDna(d); })
+      .catch(() => {})   // hide the card quietly on error
+      .finally(() => { if (alive) setDnaLoading(false); });
+    return () => { alive = false; };
+  }, [user?.id]);
 
   async function togglePush(val) {
     setPushEnabled(val);
@@ -77,6 +91,16 @@ export default function SettingsScreen({ navigation }) {
             <Text style={styles.scoreLevelText}>{user?.tastie_level || 'Picky Eater'}</Text>
           </View>
         </View>
+
+        {/* Taste DNA — shared endpoint/payload with the web profile radar */}
+        {(dnaLoading || dna) && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>My Taste DNA</Text>
+            {dnaLoading
+              ? <ActivityIndicator size="small" color={COLORS.gold} style={{ marginVertical: 24 }} />
+              : <TasteDnaRadar dna={dna} />}
+          </View>
+        )}
 
         {/* Account */}
         <View style={styles.card}>
