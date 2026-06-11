@@ -129,6 +129,9 @@ export default function HomeScreen({ navigation, route }) {
   const [awaitingFirstToken, setAwaitingFirstToken] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
+  // Cross-user AI target ({id, name}) — set via the Persona profile's chips;
+  // null = normal self chat. Sent as persona_user_id on every chat call.
+  const [personaAsk, setPersonaAsk] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
   const [unreadNotifs, setUnreadNotifs] = useState(0);   // bell badge — same count as web
   const [suggestedPrompts, setSuggestedPrompts] = useState(SUGGESTED_PROMPTS);
@@ -212,6 +215,18 @@ export default function HomeScreen({ navigation, route }) {
     setCompletedActions(prev => ({ ...prev, [cardId]: true }));
     navigation.setParams({ actionCompleted: undefined });
   }, [route?.params?.actionCompleted]);
+
+  // Cross-user AI from a Persona profile: {id, name, prompt} arms the chat so
+  // every send carries persona_user_id (mirrors web /ask?persona_user_id=&prompt=).
+  // The chip's prompt PREFILLS the input (web parity) — the user hits send.
+  useEffect(() => {
+    const pa = route?.params?.personaAsk;
+    if (!pa) return;
+    setPersonaAsk({ id: pa.id, name: pa.name });
+    if (pa.prompt) setInputText(pa.prompt);
+    setChatActive(true);
+    navigation.setParams({ personaAsk: undefined });
+  }, [route?.params?.personaAsk]);
 
   async function loadSession(session) {
     try {
@@ -352,6 +367,7 @@ export default function HomeScreen({ navigation, route }) {
         {
           message: msg, conversation_id: convId,
           lat: coords ? coords.lat : null, lng: coords ? coords.lng : null,
+          persona_user_id: personaAsk ? personaAsk.id : null,
         },
         {
           signal: controller.signal,
@@ -407,6 +423,7 @@ export default function HomeScreen({ navigation, route }) {
             body: JSON.stringify({
               message: msg, conversation_id: convId,
               lat: coords ? coords.lat : null, lng: coords ? coords.lng : null,
+              persona_user_id: personaAsk ? personaAsk.id : null,
             }),
           });
           if (data.conversation_id) setConversationId(data.conversation_id);
@@ -460,6 +477,7 @@ export default function HomeScreen({ navigation, route }) {
     setChatActive(false);
     setMessages([]);
     setConversationId(null);
+    setPersonaAsk(null);   // leaving the chat drops the cross-user target
     setInputText('');
     setLoadingPhase(LOADING_PHASES[0]);
   }
@@ -607,6 +625,20 @@ export default function HomeScreen({ navigation, route }) {
               </View>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.browseTile}
+              onPress={() => navigation.navigate('Personas')}
+              activeOpacity={0.82}
+            >
+              <View style={styles.browseIconWrap}>
+                <Ionicons name="people" size={22} color={COLORS.gold} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.browseTitle}>Tastie Personas</Text>
+                <Text style={styles.browseSub}>Browse taste profiles and ask their AI</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
           </View>
           </ScrollView>
         )}
@@ -743,6 +775,16 @@ export default function HomeScreen({ navigation, route }) {
                 ))}
               </ScrollView>
             </>
+          )}
+          {personaAsk && (
+            <View style={styles.personaBanner}>
+              <Text style={styles.personaBannerText}>
+                Asking {personaAsk.name.split(' ')[0]}'s AI
+              </Text>
+              <TouchableOpacity onPress={() => setPersonaAsk(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={14} color={COLORS.tierSText} />
+              </TouchableOpacity>
+            </View>
           )}
           <View style={styles.inputRow}>
             <TextInput
@@ -899,6 +941,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderRadius: 24, borderWidth: 0.5,
     borderColor: COLORS.border, paddingLeft: 16, paddingRight: 6, paddingVertical: 6,
   },
+  // Cross-user AI indicator (persona ask) — gold-light pill above the composer
+  personaBanner: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6,
+    backgroundColor: COLORS.goldLight, borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 4, marginBottom: 6,
+  },
+  personaBannerText: { fontFamily: 'DMSans_700Bold', fontSize: 12, color: COLORS.tierSText },
   input: {
     flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text,
     paddingVertical: 8, minHeight: 24, maxHeight: 96,   // ~4 lines, then scrolls internally

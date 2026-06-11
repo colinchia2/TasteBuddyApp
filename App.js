@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+﻿import React, { useRef, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator } from 'react-native';
@@ -51,6 +51,8 @@ import PairwiseScreen from './src/screens/PairwiseScreen';
 import ResortScreen from './src/screens/ResortScreen';
 import MyPlacesScreen from './src/screens/MyPlacesScreen';
 import RankingsScreen from './src/screens/RankingsScreen';
+import PersonaProfileScreen from './src/screens/PersonaProfileScreen';
+import PersonasBrowseScreen from './src/screens/PersonasBrowseScreen';
 import EmailVerificationPendingScreen from './src/screens/EmailVerificationPendingScreen';
 
 const Stack = createNativeStackNavigator();
@@ -134,6 +136,8 @@ function RootNavigator() {
           <Stack.Screen name="Resort" component={ResortScreen} />
           <Stack.Screen name="MyPlaces" component={MyPlacesScreen} />
           <Stack.Screen name="Rankings" component={RankingsScreen} />
+          <Stack.Screen name="PersonaProfile" component={PersonaProfileScreen} />
+          <Stack.Screen name="Personas" component={PersonasBrowseScreen} />
         </>
       )}
     </Stack.Navigator>
