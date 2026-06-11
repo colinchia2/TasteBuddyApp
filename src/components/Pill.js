@@ -5,19 +5,21 @@ import { COLORS } from '../constants/colors';
 // Locked design-token pills — no borders. Category = blue, Cuisine = warm gray.
 // Mirrors .pill-cat / .pill-cui in design_tokens.css.
 
-export function CuisinePill({ label }) {
+// `style` lets a caller cap width (e.g. maxWidth on a list row) — the inner Text
+// is already numberOfLines={1}, so a constrained pill truncates with an ellipsis.
+export function CuisinePill({ label, style }) {
   if (!label) return null;
   return (
-    <View style={[styles.pill, { backgroundColor: COLORS.pillCuiBg }]}>
+    <View style={[styles.pill, { backgroundColor: COLORS.pillCuiBg }, style]}>
       <Text style={[styles.text, { color: COLORS.pillCuiText }]} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
 
-export function CategoryPill({ label }) {
+export function CategoryPill({ label, style }) {
   if (!label) return null;
   return (
-    <View style={[styles.pill, { backgroundColor: COLORS.pillCatBg }]}>
+    <View style={[styles.pill, { backgroundColor: COLORS.pillCatBg }, style]}>
       <Text style={[styles.text, { color: COLORS.pillCatText }]} numberOfLines={1}>{label}</Text>
     </View>
   );

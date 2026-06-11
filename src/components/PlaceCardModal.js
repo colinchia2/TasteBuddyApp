@@ -64,26 +64,37 @@ export default function PlaceCardModal({ place, visible, onClose, onCategoryPres
               </TouchableOpacity>
             </View>
 
-            <View style={styles.pillRow}>
-              <TierBadge tier={place.tier} size="sm" />
-            </View>
-            {/* Each category paired with ITS OWN cuisine (one row per membership). */}
-            {memberships.map((m, i) => (
-              <View key={`${m.category_id}-${i}`} style={styles.membershipRow}>
-                {onCategoryPress ? (
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => onCategoryPress(m.category, m.category_id)}>
-                    <CategoryPill label={m.category} />
-                  </TouchableOpacity>
-                ) : <CategoryPill label={m.category} />}
-                {m.cuisine ? (
-                  onCuisinePress ? (
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => onCuisinePress(m.cuisine)}>
-                      <CuisinePill label={m.cuisine} />
-                    </TouchableOpacity>
-                  ) : <CuisinePill label={m.cuisine} />
-                ) : null}
+            {/* One demarcated card PER membership, each showing its OWN tier — a
+                place can be S-Tier as a Bar yet C-Tier as a Chicken-Sandwich spot.
+                Tier sits on its own line above the category + cuisine pills so
+                it's always unambiguous which value is which, even when they wrap. */}
+            {memberships.length ? (
+              <View style={styles.membershipList}>
+                {memberships.map((m, i) => (
+                  <View key={`${m.category_id}-${i}`} style={styles.membershipCard}>
+                    <TierBadge tier={m.tier || place.tier} size="sm" />
+                    <View style={styles.membershipPills}>
+                      {onCategoryPress ? (
+                        <TouchableOpacity activeOpacity={0.7} onPress={() => onCategoryPress(m.category, m.category_id)}>
+                          <CategoryPill label={m.category} />
+                        </TouchableOpacity>
+                      ) : <CategoryPill label={m.category} />}
+                      {m.cuisine ? (
+                        onCuisinePress ? (
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => onCuisinePress(m.cuisine)}>
+                            <CuisinePill label={m.cuisine} />
+                          </TouchableOpacity>
+                        ) : <CuisinePill label={m.cuisine} />
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
               </View>
-            ))}
+            ) : (
+              <View style={styles.pillRow}>
+                <TierBadge tier={place.tier} size="sm" />
+              </View>
+            )}
 
             {(place.address || locationLine) ? (
               <View style={styles.factRow}>
@@ -152,7 +163,14 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   name: { flex: 1, fontFamily: 'Outfit_700Bold', fontSize: 22, color: COLORS.text, marginRight: 12 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, alignItems: 'center' },
-  membershipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 8 },
+  membershipList: { marginTop: 14, gap: 8 },
+  membershipCard: {
+    backgroundColor: COLORS.offWhite,
+    borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    gap: 8,
+  },
+  membershipPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
   factRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   factIcon: { marginRight: 8 },
   factText: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, flexShrink: 1 },

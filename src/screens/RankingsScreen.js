@@ -254,7 +254,7 @@ export default function RankingsScreen({ navigation, route }) {
               {section.tier === 'S' && item.s_tier_position != null ? (
                 <Text style={styles.position}>#{item.s_tier_position}</Text>
               ) : null}
-              <View style={{ flex: 1 }}>
+              <View style={styles.nameCol}>
                 <Text style={styles.name} numberOfLines={1}>{item.display_name}</Text>
                 {(item.neighborhood || item.city || item.address) ? (
                   <Text style={styles.meta} numberOfLines={1}>
@@ -262,18 +262,22 @@ export default function RankingsScreen({ navigation, route }) {
                   </Text>
                 ) : null}
               </View>
-              {/* In the combined view the category pill is load-bearing — it shows
-                  WHICH membership this row represents. Tappable → scope to it. */}
-              {combined ? (
-                <TouchableOpacity activeOpacity={0.7} onPress={() => scopeToCategory(rowCat(item), item.category ? item.category.id : null)}>
-                  <CategoryPill label={rowCat(item)} />
-                </TouchableOpacity>
-              ) : null}
-              {item.cuisine ? (
-                <TouchableOpacity activeOpacity={0.7} onPress={() => scopeToCuisine(item.cuisine)}>
-                  <CuisinePill label={item.cuisine} />
-                </TouchableOpacity>
-              ) : null}
+              {/* Pills are capped at ~half the row so the place name always keeps the
+                  other half and ellipsizes rather than getting crushed. Long category /
+                  cuisine text truncates inside its pill. In the combined view the
+                  category pill is load-bearing (shows WHICH membership this row is). */}
+              <View style={styles.pillsCol}>
+                {combined ? (
+                  <TouchableOpacity activeOpacity={0.7} style={styles.pillTouch} onPress={() => scopeToCategory(rowCat(item), item.category ? item.category.id : null)}>
+                    <CategoryPill label={rowCat(item)} style={styles.rowPill} />
+                  </TouchableOpacity>
+                ) : null}
+                {item.cuisine ? (
+                  <TouchableOpacity activeOpacity={0.7} style={styles.pillTouch} onPress={() => scopeToCuisine(item.cuisine)}>
+                    <CuisinePill label={item.cuisine} style={styles.rowPill} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
               <Ionicons name="chevron-forward" size={16} color={COLORS.textLight} style={{ marginLeft: 6 }} />
             </TouchableOpacity>
           )}
@@ -367,6 +371,12 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border, padding: 14, gap: 6,
   },
   position: { fontFamily: 'Outfit_800ExtraBold', fontSize: 15, color: COLORS.gold, marginRight: 6, minWidth: 30 },
+  // Name takes the remaining space (≥ half, since the pill column is capped) and
+  // truncates; pill column is capped at ~46% and its pills wrap/ellipsize inside it.
+  nameCol: { flex: 1, minWidth: 0 },
+  pillsCol: { maxWidth: '46%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 4 },
+  pillTouch: { maxWidth: '100%' },
+  rowPill: { maxWidth: '100%' },
   name: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.text },
   meta: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 3 },
   emptyState: { paddingTop: 60, alignItems: 'center', paddingHorizontal: 32 },
