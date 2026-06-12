@@ -100,7 +100,7 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
               {msg.role === 'ai' ? (
                 <MarkdownMessage text={msg.text} />
               ) : (
-                <Text style={styles.userBubbleText}>{msg.text}</Text>
+                <Text selectable style={styles.userBubbleText}>{msg.text}</Text>
               )}
             </View>
           ))}

@@ -661,7 +661,7 @@ export default function HomeScreen({ navigation, route }) {
               <View key={i}>
                 {msg.role === 'user' ? (
                   <View style={[styles.bubble, styles.bubbleUser]}>
-                    <Text style={[styles.bubbleText, styles.bubbleTextUser]}>{msg.text}</Text>
+                    <Text selectable style={[styles.bubbleText, styles.bubbleTextUser]}>{msg.text}</Text>
                   </View>
                 ) : (
                   <View>

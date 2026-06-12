@@ -30,10 +30,10 @@ function parseInline(text) {
 function InlineText({ text, style }) {
   const parts = parseInline(text);
   if (parts.length === 1 && !parts[0].bold && !parts[0].italic && !parts[0].link) {
-    return <Text style={style}>{parts[0].text}</Text>;
+    return <Text selectable style={style}>{parts[0].text}</Text>;
   }
   return (
-    <Text style={style}>
+    <Text selectable style={style}>
       {parts.map((p, i) => (
         p.link ? (
           <Text
@@ -85,7 +85,7 @@ export default function MarkdownMessage({ text }) {
           <View key={tableKey} style={styles.table}>
             <View style={styles.tableHeaderRow}>
               {headerCells.map((c, ci) => (
-                <Text key={ci} style={styles.tableHeaderCell}>{c}</Text>
+                <Text key={ci} selectable style={styles.tableHeaderCell}>{c}</Text>
               ))}
             </View>
             {bodyRows.map((row, ri) => {
@@ -118,21 +118,21 @@ export default function MarkdownMessage({ text }) {
     // H1: # heading
     const h1M = t.match(/^#\s+(.+)$/);
     if (h1M) {
-      elements.push(<Text key={i} style={styles.h1}>{h1M[1]}</Text>);
+      elements.push(<Text key={i} selectable style={styles.h1}>{h1M[1]}</Text>);
       continue;
     }
 
     // H2: ## heading
     const h2M = t.match(/^##\s+(.+)$/);
     if (h2M) {
-      elements.push(<Text key={i} style={styles.h2}>{h2M[1]}</Text>);
+      elements.push(<Text key={i} selectable style={styles.h2}>{h2M[1]}</Text>);
       continue;
     }
 
     // H3: ### heading
     const h3M = t.match(/^###\s+(.+)$/);
     if (h3M) {
-      elements.push(<Text key={i} style={styles.h3}>{h3M[1]}</Text>);
+      elements.push(<Text key={i} selectable style={styles.h3}>{h3M[1]}</Text>);
       continue;
     }
 
@@ -152,7 +152,7 @@ export default function MarkdownMessage({ text }) {
     if (recM) {
       elements.push(
         <View key={i} style={styles.recHeader}>
-          <Text style={styles.recTitle}>{recM[1].trim()}</Text>
+          <Text selectable style={styles.recTitle}>{recM[1].trim()}</Text>
           {recM[2] ? <InlineText text={recM[2]} style={styles.recSub} /> : null}
         </View>
       );
