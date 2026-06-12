@@ -21,7 +21,16 @@ export default function LogVisitActionCard({ data, cardId, completed }) {
       {data.place_name ? <Text style={styles.cardPlace}>{data.place_name}</Text> : null}
       <TouchableOpacity
         style={styles.goldButton}
-        onPress={() => navigation.navigate('LogVisit', {
+        onPress={() => navigation.navigate('LogVisit', data.place_id ? {
+          // 2b: backend resolver attached the real place_id (+ any open pending
+          // check-in) → target the EXISTING place directly (no search, no dup);
+          // checkinId threads to the save so it closes the check-in.
+          placeId: data.place_id,
+          placeName: data.place_name || '',
+          checkinId: data.pending_checkin_id || null,
+          prefillMealPeriod: data.meal_period || null,
+          fromActionCard: cardId,
+        } : {
           prefillSearch: data.place_name || '',
           prefillMealPeriod: data.meal_period || null,
           fromActionCard: cardId,
