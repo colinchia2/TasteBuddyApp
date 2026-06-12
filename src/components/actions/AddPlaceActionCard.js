@@ -21,6 +21,9 @@ export default function AddPlaceActionCard({ data, cardId, completed }) {
         style={styles.goldButton}
         onPress={() => navigation.navigate('AddPlace', {
           placeName: data.place_name || '',
+          // #5: discover_new quick-add — prefill the candidate's gpid so AddPlace
+          // pre-selects it (skips search; de-dupes by google_place_id).
+          googlePlaceId: data.google_place_id || '',
           fromActionCard: cardId,
         })}
       >
