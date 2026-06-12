@@ -311,7 +311,10 @@ export default function HomeScreen({ navigation, route }) {
       role: 'ai',
       text: evt.response || streamRawRef.current || 'No response received.',
       clarifyQuestions,
-      followUps: clarifyQuestions ? [] : (serverFollowUps.length ? serverFollowUps : getFollowUps(evt.mode)),
+      // Server decides: model chips (kind='model') OR a personalized pivot
+      // (kind='suggested', shown under a lead-in caption). No client generic trio.
+      followUps: clarifyQuestions ? [] : serverFollowUps,
+      followUpsKind: clarifyQuestions ? null : (evt.followups_kind || null),
       actions: evt.actions || [],
       streaming: false,
     };
@@ -432,6 +435,7 @@ export default function HomeScreen({ navigation, route }) {
             is_clarifying: data.is_clarifying, questions: data.questions,
             actions: data.actions || [],
             followups: data.followups || [],
+            followups_kind: data.followups_kind || null,
           }));
           return;
         } catch (fbErr) {
@@ -685,16 +689,21 @@ export default function HomeScreen({ navigation, route }) {
                           onSurprise={() => sendMessage('Surprise me — just give me your best picks, no more questions.')}
                         />
                       ) : msg.followUps?.length > 0 ? (
-                        <View style={styles.followUpRow}>
-                          {msg.followUps.map((fu, j) => (
-                            <TouchableOpacity
-                              key={j}
-                              style={styles.followUpChip}
-                              onPress={() => sendMessage(fu)}
-                            >
-                              <Text style={styles.followUpText}>{fu}</Text>
-                            </TouchableOpacity>
-                          ))}
+                        <View>
+                          {msg.followUpsKind === 'suggested' ? (
+                            <Text style={styles.followUpPivotCaption}>Okay — what would you like to do next?</Text>
+                          ) : null}
+                          <View style={styles.followUpRow}>
+                            {msg.followUps.map((fu, j) => (
+                              <TouchableOpacity
+                                key={j}
+                                style={styles.followUpChip}
+                                onPress={() => sendMessage(fu)}
+                              >
+                                <Text style={styles.followUpText}>{fu}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
                         </View>
                       ) : null}
                     </View>
@@ -883,6 +892,8 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleTextUser: { fontFamily: 'DMSans_400Regular', color: '#fff' },
   bubbleTextAI: { fontFamily: 'DMSans_400Regular', color: COLORS.text },
+  followUpPivotCaption: { fontFamily: 'DMSans_400Regular', fontSize: 12,
+                          color: COLORS.textMuted, marginTop: 14, marginBottom: 2 },
   followUpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 },
   followUpChip: {
     backgroundColor: COLORS.goldLight, borderRadius: 14, borderWidth: 0.5,
