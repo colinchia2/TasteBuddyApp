@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Dimensions,
 } from 'react-native';
 import ScreenHeader from '../components/ScreenHeader';
 import TasteDnaRadar from '../components/TasteDnaRadar';
@@ -18,6 +18,12 @@ import { api, BASE_URL } from '../api/client';
 // storage_url is used AS-IS (never concatenate paths) — relative URLs just get
 // the API host prefixed, same idiom as EditVisitScreen.
 const absUrl = (u) => (u && u.startsWith('http') ? u : `${BASE_URL}${u}`);
+
+// Recent-photos row: non-scrolling, show only as many thumbs as fit the card
+// width (card = 14 margin + 16 padding each side = 60; thumb 108 + 8 gap).
+const RECENT_THUMB = 108, RECENT_GAP = 8;
+const RECENT_FIT = Math.max(1, Math.floor(
+  (Dimensions.get('window').width - 60 + RECENT_GAP) / (RECENT_THUMB + RECENT_GAP)));
 
 function TierBadge({ tier, label, small }) {
   const c = TIER_COLORS[tier] || { bg: COLORS.tierTBE, text: COLORS.tierTBEText };
@@ -112,21 +118,29 @@ export default function PersonaProfileScreen({ navigation, route }) {
           <Text style={styles.cardTitle}>Top Cuisines</Text>
           <View style={styles.pillWrap}>
             {top_cuisines.length ? top_cuisines.map((c) => (
-              <View key={c.name} style={[styles.pill, { backgroundColor: COLORS.pillCuiBg }]}>
-                <Text style={[styles.pillText, { color: COLORS.pillCuiText }]}>
-                  {c.name} <Text style={{ opacity: 0.65, fontSize: 11 }}>{c.count}</Text>
-                </Text>
-              </View>
+              // Tap → Rankings scoped to this cuisine (mirrors web ?view=rankings&cuisine=X).
+              <TouchableOpacity key={c.name} activeOpacity={0.7}
+                onPress={() => navigation.navigate('Rankings', { cuisine: c.name })}>
+                <View style={[styles.pill, { backgroundColor: COLORS.pillCuiBg }]}>
+                  <Text style={[styles.pillText, { color: COLORS.pillCuiText }]}>
+                    {c.name} <Text style={{ opacity: 0.65, fontSize: 11 }}>{c.count}</Text>
+                  </Text>
+                </View>
+              </TouchableOpacity>
             )) : <Text style={styles.emptyText}>No cuisines yet.</Text>}
           </View>
           <Text style={[styles.cardTitle, { marginTop: 16 }]}>Top Categories</Text>
           <View style={styles.pillWrap}>
             {top_categories.length ? top_categories.map((c) => (
-              <View key={c.name} style={[styles.pill, { backgroundColor: COLORS.pillCatBg }]}>
-                <Text style={[styles.pillText, { color: COLORS.pillCatText }]}>
-                  {c.name} <Text style={{ opacity: 0.65, fontSize: 11 }}>{c.count}</Text>
-                </Text>
-              </View>
+              // Tap → Rankings scoped to this category (mirrors web ?view=rankings&category=X).
+              <TouchableOpacity key={c.name} activeOpacity={0.7}
+                onPress={() => navigation.navigate('Rankings', { categoryName: c.name })}>
+                <View style={[styles.pill, { backgroundColor: COLORS.pillCatBg }]}>
+                  <Text style={[styles.pillText, { color: COLORS.pillCatText }]}>
+                    {c.name} <Text style={{ opacity: 0.65, fontSize: 11 }}>{c.count}</Text>
+                  </Text>
+                </View>
+              </TouchableOpacity>
             )) : <Text style={styles.emptyText}>No categories yet.</Text>}
           </View>
         </View>
@@ -163,11 +177,13 @@ export default function PersonaProfileScreen({ navigation, route }) {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Recent Check-ins</Text>
             {recent_photos.length ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 6 }}>
-                {recent_photos.map((ph, i) => (
+              // Non-scrolling row — only the thumbs that fit; rest clipped (no
+              // second horizontal scroller; Highlights below keeps its scroll).
+              <View style={{ flexDirection: 'row', overflow: 'hidden', marginBottom: 6 }}>
+                {recent_photos.slice(0, RECENT_FIT).map((ph, i) => (
                   <Image key={`${ph.url}-${i}`} source={{ uri: absUrl(ph.url) }} style={styles.recentPhoto} />
                 ))}
-              </ScrollView>
+              </View>
             ) : null}
             {recent_checkins.map((ci, i) => {
               const tc = TIER_COLORS[ci.tier] || { bg: COLORS.tierTBE, text: COLORS.tierTBEText };
