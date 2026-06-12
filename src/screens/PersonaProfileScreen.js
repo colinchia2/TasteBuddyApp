@@ -78,43 +78,34 @@ export default function PersonaProfileScreen({ navigation, route }) {
       <ScreenHeader title={`${identity.display_name}'s Persona`} navigation={navigation} />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
 
-        {/* Hero (stacked): avatar + name · Tastie seal · micro-stats */}
-        <View style={styles.card}>
-          <View style={{ alignItems: 'center' }}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{identity.avatar_initial}</Text>
-            </View>
-            <Text style={styles.heroName}>{identity.display_name}</Text>
-            {identity.vibe_tag ? <Text style={styles.vibe}>{identity.vibe_tag}</Text> : null}
-            {/* TAGLINE SLOT — intentionally empty. The Hero prompt fills this
-                with the archetype headline + AI subtitle. Do not add content. */}
-            {/* Score medallion — circular gold prestige badge (dashed inner
-                ring). Flat fill ≈ the web radial gradient (no gradient lib). */}
-            <View style={styles.medallion}>
-              <View style={styles.medallionRing} />
-              <Text style={styles.medallionNum}>{tastie.score}</Text>
-              <Text style={styles.medallionLabel} numberOfLines={2}>{tastie.label}</Text>
-            </View>
-            <View style={styles.statsRow}>
-              {[['Visits', micro_stats.visits], ['Places', micro_stats.places],
-                ['Cuisines', micro_stats.cuisines], ['Categories', micro_stats.categories]]
-                .map(([label, val]) => (
-                  <View key={label} style={{ alignItems: 'center' }}>
-                    <Text style={styles.statVal}>{val}</Text>
-                    <Text style={styles.statLabel}>{label}</Text>
-                  </View>
-                ))}
-            </View>
+        {/* Hero Taste Card (collectible): seal · rank · name · radar · lean ·
+            stats. Replaces the old hero band AND the standalone Taste DNA card —
+            every value appears ONCE, here. Solid warm fill ≈ the web gold
+            gradient (real gradient bg deferred — REMINDER_app_gradient_upgrade.md). */}
+        <View style={styles.tasteCard}>
+          {/* Score seal (corner badge) */}
+          <View style={styles.seal}>
+            <Text style={styles.sealNum}>{tastie.score}</Text>
+            <Text style={styles.sealLabel}>SCORE</Text>
+          </View>
+          {/* Rank headline (Hero-swappable archetype slot) + name */}
+          <Text style={styles.cardRank}>{tastie.rank_title || tastie.label}</Text>
+          <Text style={styles.cardName}>{identity.display_name}</Text>
+          {identity.vibe_tag ? <Text style={styles.cardVibe}>{identity.vibe_tag}</Text> : null}
+          {/* TAGLINE SLOT — Hero prompt fills the archetype subtitle here. */}
+          {taste_dna ? <TasteDnaRadar dna={taste_dna} size={300} /> : null}
+          {/* Footer stats */}
+          <View style={styles.cardStats}>
+            {[['Visits', micro_stats.visits], ['Places', micro_stats.places],
+              ['Cuisines', micro_stats.cuisines], ['Categories', micro_stats.categories]]
+              .map(([label, val], i) => (
+                <View key={label} style={[styles.cardStat, i < 3 && styles.cardStatDivider]}>
+                  <Text style={styles.cardStatVal}>{val}</Text>
+                  <Text style={styles.cardStatLabel}>{label}</Text>
+                </View>
+              ))}
           </View>
         </View>
-
-        {/* Taste DNA — the shared radar component (Prompt 2), its real home */}
-        {taste_dna ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Taste DNA</Text>
-            <TasteDnaRadar dna={taste_dna} />
-          </View>
-        ) : null}
 
         {/* Top Cuisines + Top Categories — pill rows, locked colors, no borders */}
         <View style={styles.card}>
@@ -246,28 +237,30 @@ const styles = StyleSheet.create({
                textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
   errorText: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.textMuted,
                textAlign: 'center', marginTop: 60, paddingHorizontal: 30 },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.goldLight,
-            alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontFamily: 'Outfit_700Bold', fontSize: 30, color: COLORS.tierSText },
-  heroName: { fontFamily: 'Outfit_700Bold', fontSize: 22, color: COLORS.text, marginTop: 8 },
-  vibe: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted,
-          fontStyle: 'italic', marginTop: 2 },
-  medallion: { width: 104, height: 104, borderRadius: 52, marginTop: 14,
-               backgroundColor: COLORS.personaMedallion, alignItems: 'center',
-               justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(200,150,12,0.25)',
-               shadowColor: '#C8960C', shadowOpacity: 0.18, shadowRadius: 10,
-               shadowOffset: { width: 0, height: 6 } },
-  medallionRing: { position: 'absolute', top: 8, left: 8, right: 8, bottom: 8,
-                   borderRadius: 44, borderWidth: 1.5, borderStyle: 'dashed',
-                   borderColor: 'rgba(200,150,12,0.40)' },
-  medallionNum: { fontFamily: 'Outfit_700Bold', fontSize: 32, lineHeight: 34, color: COLORS.gold },
-  medallionLabel: { fontFamily: 'Outfit_700Bold', fontSize: 9, letterSpacing: 0.7,
-                    textTransform: 'uppercase', color: COLORS.personaMedallionLabel,
-                    marginTop: 2, maxWidth: 86, textAlign: 'center' },
-  statsRow: { flexDirection: 'row', gap: 26, marginTop: 14 },
-  statVal: { fontFamily: 'Outfit_700Bold', fontSize: 18, color: COLORS.text },
-  statLabel: { fontFamily: 'DMSans_700Bold', fontSize: 9, color: COLORS.textLight,
-               textTransform: 'uppercase', letterSpacing: 0.6 },
+  // ── Hero Taste Card (collectible) ──────────────────────────────────────────
+  tasteCard: { backgroundColor: COLORS.personaCardFill, borderWidth: 2.5,
+               borderColor: COLORS.personaCardBorder, borderRadius: 24,
+               marginHorizontal: 14, marginTop: 12, paddingHorizontal: 18,
+               paddingTop: 22, paddingBottom: 16, alignItems: 'center', overflow: 'hidden',
+               shadowColor: '#C8960C', shadowOpacity: 0.16, shadowRadius: 14,
+               shadowOffset: { width: 0, height: 8 } },
+  seal: { position: 'absolute', top: 14, right: 14, width: 60, height: 60, borderRadius: 30,
+          backgroundColor: '#FBE7BE', alignItems: 'center', justifyContent: 'center',
+          borderWidth: 2, borderColor: 'rgba(200,150,12,0.30)' },
+  sealNum: { fontFamily: 'Outfit_700Bold', fontSize: 20, lineHeight: 22, color: COLORS.gold },
+  sealLabel: { fontFamily: 'Outfit_700Bold', fontSize: 7.5, letterSpacing: 1, color: '#9A7212', marginTop: 1 },
+  cardRank: { fontFamily: 'Outfit_700Bold', fontSize: 11, letterSpacing: 1.6,
+              textTransform: 'uppercase', color: COLORS.gold, marginTop: 2 },
+  cardName: { fontFamily: 'Outfit_800ExtraBold', fontSize: 28, color: COLORS.text, marginTop: 2 },
+  cardVibe: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#9A7212',
+              fontStyle: 'italic', marginTop: 1 },
+  cardStats: { flexDirection: 'row', alignSelf: 'stretch', marginTop: 12, paddingTop: 12,
+               borderTopWidth: 1, borderTopColor: 'rgba(200,150,12,0.18)' },
+  cardStat: { flex: 1, alignItems: 'center' },
+  cardStatDivider: { borderRightWidth: 1, borderRightColor: 'rgba(200,150,12,0.18)' },
+  cardStatVal: { fontFamily: 'Outfit_800ExtraBold', fontSize: 18, color: COLORS.text },
+  cardStatLabel: { fontFamily: 'DMSans_700Bold', fontSize: 9, color: '#9A7212',
+                   textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 2 },
   pillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pill: { borderRadius: 20, paddingHorizontal: 13, paddingVertical: 5 },
   pillText: { fontFamily: 'DMSans_500Medium', fontSize: 13 },

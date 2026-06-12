@@ -1,18 +1,20 @@
-// Taste DNA radar — 6-spoke bipolar radar (react-native-svg, ships OTA).
-// Renders the SHARED /api/persona/<id>/taste-dna payload: axis order + pole
-// labels come from the payload (the server's DNA_AXES constant) — nothing
-// hardcoded here. Geometry/colors must stay identical to the web renderer in
-// personas/public_profile.html: hexagon grid, gold polygon #C8960C 18% fill /
-// 2.5 stroke, dots at vertices, Pole A at the rim, Pole B faint near center
-// (a small shape reads as "leans inward", never "worse").
+// Taste DNA radar — 6-spoke SHARP-polygon radar (react-native-svg, ships OTA).
+// Lives inside the gold Taste Card (PersonaProfileScreen). Renders the SHARED
+// /api/persona/<id>/taste-dna payload: axis order + pole labels come from the
+// payload (the server's DNA_AXES constant) — nothing hardcoded. Geometry +
+// styling mirror the web renderer in personas/public_profile.html: soft-gold
+// grid, sharp (miter) polygon with an SVG radialGradient fill, haloed gold
+// vertex dots, Pole A names at the rim. App OMITS the feGaussianBlur edge glow
+// (flaky in react-native-svg) — gradient-only fallback; web keeps the glow.
 import React from 'react';
 import { View, Text } from 'react-native';
-import Svg, { Polygon, Line, Circle, Text as SvgText } from 'react-native-svg';
+import Svg, { Polygon, Line, Circle, Text as SvgText,
+  Defs, RadialGradient, Stop } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
 
-const GOLD = COLORS.gold;            // #C8960C
-const GRID = COLORS.dnaRadarGrid;    // #ECE8E0
-const INK = COLORS.dnaRadarInk;      // #1C1A17
+const GOLD = COLORS.gold;                   // #C8960C
+const GRID = 'rgba(200,150,12,0.20)';       // soft-gold grid on the Taste Card
+const INK = COLORS.dnaRadarInk;             // #1C1A17
 
 export default function TasteDnaRadar({ dna, size = 320 }) {
   if (!dna || !Array.isArray(dna.axes) || !dna.axes.length) return null;
@@ -45,6 +47,13 @@ export default function TasteDnaRadar({ dna, size = 320 }) {
   return (
     <View style={{ alignItems: 'center' }}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Defs>
+          {/* Radial gradient fill — saturated gold center → soft edge (same as web). */}
+          <RadialGradient id="dnaFill" cx="50%" cy="50%" r="62%">
+            <Stop offset="0%" stopColor={GOLD} stopOpacity="0.6" />
+            <Stop offset="100%" stopColor={GOLD} stopOpacity="0.1" />
+          </RadialGradient>
+        </Defs>
         {[0.25, 0.5, 0.75, 1].map((frac) => (
           <Polygon key={frac} points={ringPoints(frac)} fill="none" stroke={GRID} strokeWidth={1} />
         ))}
@@ -52,12 +61,14 @@ export default function TasteDnaRadar({ dna, size = 320 }) {
           const [x, y] = pt(i, 1);
           return <Line key={`s${i}`} x1={CX} y1={CY} x2={x} y2={y} stroke={GRID} strokeWidth={1} />;
         })}
+        {/* SHARP polygon (miter joins) + gradient fill. No glow on app (fallback). */}
         <Polygon
           points={dataPts.map((p) => p.join(',')).join(' ')}
-          fill={GOLD} fillOpacity={0.22} stroke={GOLD} strokeWidth={2.5} strokeLinejoin="round"
+          fill="url(#dnaFill)" stroke={GOLD} strokeWidth={2.5} strokeLinejoin="miter"
         />
+        {/* Haloed vertex dots — gold fill + white ring. */}
         {dataPts.map((p, i) => (
-          <Circle key={`d${i}`} cx={p[0]} cy={p[1]} r={4} fill={GOLD} />
+          <Circle key={`d${i}`} cx={p[0]} cy={p[1]} r={4.5} fill={GOLD} stroke="#fff" strokeWidth={2} />
         ))}
         {/* Rim labels ONLY (pole_a at the vertices). The inner grey pole_b
             labels were dropped (decluttered) — the bipolar read now lives in the
@@ -73,7 +84,7 @@ export default function TasteDnaRadar({ dna, size = 320 }) {
           );
         })}
       </Svg>
-      <Text style={{ fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#444', marginTop: 2 }}>
+      <Text style={{ fontFamily: 'DMSans_600SemiBold', fontSize: 13, color: '#5a4a22', marginTop: 2 }}>
         {leanLine}
       </Text>
       {dna.low_confidence ? (

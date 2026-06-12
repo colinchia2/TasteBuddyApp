@@ -41,6 +41,12 @@ export const COLORS = {
   personaMedallionLabel: '#9A7212',
   personaAiDark: '#2E271D',        // flat ≈ the web Ask-AI dark gradient
   personaAiSub: '#D7CBB4',
+
+  // Taste Card (collectible hero). Solid fill ≈ the web 3-stop gold gradient;
+  // a real gradient bg needs expo-linear-gradient (deferred — see
+  // REMINDER_app_gradient_upgrade.md). Must match design_tokens.css --persona-card-*.
+  personaCardFill: '#FBEAC6',
+  personaCardBorder: '#E6BE5E',
 };
 
 export const TIER_COLORS = {
