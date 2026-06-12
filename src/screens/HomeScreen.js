@@ -779,7 +779,7 @@ export default function HomeScreen({ navigation, route }) {
           {personaAsk && (
             <View style={styles.personaBanner}>
               <Text style={styles.personaBannerText}>
-                Asking {personaAsk.name.split(' ')[0]}'s AI
+                You're asking {personaAsk.name.split(' ')[0]}'s TasteBuddy AI
               </Text>
               <TouchableOpacity onPress={() => setPersonaAsk(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="close" size={14} color={COLORS.tierSText} />
