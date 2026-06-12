@@ -367,8 +367,9 @@ export default function AddPlaceScreen({ navigation, route }) {
         body.state = confirmHasStates ? (confirmState.trim() || null) : null;
         body.neighborhood = confirmNeighborhood.trim() || null;
       } else if (selectedPlace.manual && selectedPlace.manualCity) {
-        // Manual entry already collected a required city — resolve in ONE pass.
-        body.location_confirmed = true;
+        // Manual entry: send the typed city/neighborhood WITHOUT location_confirmed —
+        // the confirm panel now ALWAYS shows once (server rule), prefilled with these
+        // plus the server-derived neighborhood (NYC NTA polygon / Google component).
         body.city = selectedPlace.manualCity;
         body.neighborhood = selectedPlace.neighborhood || null;
       }
@@ -456,7 +457,11 @@ export default function AddPlaceScreen({ navigation, route }) {
         setConfirmCity(prev => prev || loc.city || '');
         setConfirmNeighborhood(prev => prev || loc.neighborhood || '');
         setNeedConfirm(true);
-        Alert.alert('Confirm location', e.message || 'Please confirm the location for this place.');
+        // The panel now shows on EVERY add (server rule), prefilled — only alert
+        // when the user actually has to type something (no city resolved).
+        if (!(loc.city || '').trim()) {
+          Alert.alert('Confirm location', e.message || 'Please confirm the location for this place.');
+        }
       } else {
         Alert.alert('Error', e.message);
       }
