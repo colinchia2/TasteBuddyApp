@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Image, Dimensions,
+  ActivityIndicator, Image, Dimensions, Linking,
 } from 'react-native';
 import ScreenHeader from '../components/ScreenHeader';
 import TasteDnaRadar from '../components/TasteDnaRadar';
@@ -93,11 +93,13 @@ export default function PersonaProfileScreen({ navigation, route }) {
         <View style={styles.tasteCard}>
           {/* Top-left label so the user knows what this is. */}
           <Text style={styles.cardKicker}>Tastie Score Card</Text>
-          {/* Score seal (corner badge), labelled "Tastie Score". */}
-          <View style={styles.seal}>
+          {/* Score seal (corner badge), labelled "Tastie Score". Tap → the Tastie
+              Score explainer page in the phone's external browser. */}
+          <TouchableOpacity style={styles.seal} activeOpacity={0.8}
+            onPress={() => Linking.openURL('https://tastebuddy-colinchia2.pythonanywhere.com/tastie-score')}>
             <Text style={styles.sealNum}>{tastie.score}</Text>
             <Text style={styles.sealLabel}>Tastie Score</Text>
-          </View>
+          </TouchableOpacity>
           {/* Display name → archetype → subtitle (lean_line, italic, centered). */}
           <Text style={styles.cardName}>{identity.display_name}</Text>
           {identity.vibe_tag ? <Text style={styles.cardVibe}>{identity.vibe_tag}</Text> : null}
