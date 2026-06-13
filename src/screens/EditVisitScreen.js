@@ -36,7 +36,8 @@ function formatDateDisplay(isoDate) {
   return `${m}/${d}/${y}`;
 }
 
-const OCCASIONS = ['Date night', 'Solo', 'Business', 'Family', 'Friends', 'Special occasion'];
+// Must match the web set + order (base.html #lv-occasion-btns) — cross-platform parity.
+const OCCASIONS = ['Solo', 'Date Night', 'Friends', 'Family', 'Business', 'Birthday', 'Celebration', 'Other'];
 const PARTY_SIZES = [1, 2, 3, 4, 5];
 const TOD_CHIPS = [
   { label: 'Breakfast', value: 'Breakfast' },

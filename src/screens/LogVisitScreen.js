@@ -14,7 +14,8 @@ import { fetchBlendedPlaces } from '../utils/placeSearch';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const OCCASIONS = ['Date night', 'Solo', 'Business', 'Family', 'Friends', 'Special occasion'];
+// Must match the web set + order (base.html #lv-occasion-btns) — cross-platform parity.
+const OCCASIONS = ['Solo', 'Date Night', 'Friends', 'Family', 'Business', 'Birthday', 'Celebration', 'Other'];
 const PARTY_SIZES = [1, 2, 3, 4, 5]; // 5 displays as '4+'
 const TOD_CHIPS = [
   { label: 'Breakfast', minutes: 9 * 60 },
@@ -377,11 +378,11 @@ export default function LogVisitScreen({ navigation, route }) {
     setTimeMinutes(chip.minutes);
   }
 
-  // ── Occasion toggle ───────────────────────────────────────────────────────────
+  // ── Occasion (single-select, B2) ──────────────────────────────────────────────
+  // Exactly one occasion. Kept as a 1-element array; the server reads the first
+  // value (and rejects empty). Tapping the selected chip clears it.
   function toggleOccasion(occ) {
-    setOccasions(prev =>
-      prev.includes(occ) ? prev.filter(o => o !== occ) : [...prev, occ]
-    );
+    setOccasions(prev => (prev.includes(occ) ? [] : [occ]));
   }
 
   // ── Category check/tier ───────────────────────────────────────────────────────
@@ -440,8 +441,10 @@ export default function LogVisitScreen({ navigation, route }) {
     const activeCats = categories.filter(c => checkedCats[c.user_place_id]);
     if (!placeId) { Alert.alert('Select a place first'); return; }
     if (activeCats.length === 0) { Alert.alert('Select at least one category'); return; }
-    if (occasions.length === 0) { Alert.alert('Select an occasion'); return; }
-    if (!partySize) { Alert.alert('Select a party size'); return; }
+    // Required fields (B2) — identical copy on web client, app client, and server.
+    if (!selectedTOD) { Alert.alert('Select a time of day.'); return; }
+    if (occasions.length === 0) { Alert.alert('Select an occasion.'); return; }
+    if (!partySize) { Alert.alert('Select a party size.'); return; }
 
     const dateStr = selectedDate;
     const timeStr = fmtMinutes(timeMinutes);
@@ -547,7 +550,9 @@ export default function LogVisitScreen({ navigation, route }) {
 
   // ── Render: form ──────────────────────────────────────────────────────────────
   const activeCatCount = categories.filter(c => checkedCats[c.user_place_id]).length;
-  const canSave = activeCatCount > 0 && !saving;
+  // Required set (B2): ≥1 category, a time of day, exactly one occasion, a party
+  // size. Submit-time Alerts above explain each; this just gates the button.
+  const canSave = activeCatCount > 0 && !!selectedTOD && occasions.length > 0 && !!partySize && !saving;
 
   // New-place gate: this place has ZERO category memberships (an orphan — e.g. a
   // GPS check-in not yet categorised). Intercept BEFORE the log form so the user

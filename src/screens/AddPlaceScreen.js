@@ -336,6 +336,11 @@ export default function AddPlaceScreen({ navigation, route }) {
 
   async function save() {
     if (!selectedPlace) return;
+    // Category is mandatory (B2) — same canonical copy as web + server.
+    if (!selectedCategory?.id) {
+      Alert.alert('Category required', 'Please select a category.');
+      return;
+    }
     if (!cuisine.trim()) {
       Alert.alert('Cuisine required', 'Please enter a cuisine before saving.');
       return;
@@ -369,7 +374,7 @@ export default function AddPlaceScreen({ navigation, route }) {
       } else if (selectedPlace.manual && selectedPlace.manualCity) {
         // Manual entry: send the typed city/neighborhood WITHOUT location_confirmed —
         // the confirm panel now ALWAYS shows once (server rule), prefilled with these
-        // plus the server-derived neighborhood (NYC NTA polygon / Google component).
+        // plus the server-derived neighborhood (NYC NTA polygon only; blank elsewhere).
         body.city = selectedPlace.manualCity;
         body.neighborhood = selectedPlace.neighborhood || null;
       }
@@ -677,15 +682,16 @@ export default function AddPlaceScreen({ navigation, route }) {
             )}
           </View>
 
-          {/* Location confirm — only shown when the server flags the location as
-              uncertain (need_location_confirm). City is the one hard-required
-              field; country defaults from the address; state is US-only/optional. */}
+          {/* Location confirm — ALWAYS shown on a new add (server returns
+              need_location_confirm on the first request and commits only on the
+              resubmit). Calm confirmation, not an error. City is the one hard-
+              required field; country defaults from the address; state is
+              US-only/optional; neighborhood is NYC-only prefill, blank elsewhere. */}
           {needConfirm && (
             <View>
               <View style={styles.confirmBanner}>
-                <Text style={styles.confirmBannerText}>
-                  We couldn't fully verify this location — please confirm it.
-                </Text>
+                <Text style={styles.confirmBannerTitle}>Confirm the city & neighborhood</Text>
+                <Text style={styles.confirmBannerText}>Looks right?</Text>
               </View>
               <Text style={styles.sectionLabel}>Country</Text>
               <GeoField
@@ -847,6 +853,7 @@ const styles = StyleSheet.create({
   manualToggleText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.gold },
   manualHint: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 10 },
   manualBack: { alignItems: 'center', marginTop: 12 },
-  confirmBanner: { backgroundColor: '#FCEBEB', borderRadius: 10, padding: 10, marginTop: 12, marginBottom: 2 },
-  confirmBannerText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: '#791F1F' },
+  confirmBanner: { backgroundColor: COLORS.confirmBg, borderRadius: 10, padding: 10, marginTop: 12, marginBottom: 2 },
+  confirmBannerTitle: { fontFamily: 'DMSans_700Bold', fontSize: 13, color: COLORS.confirmText, marginBottom: 2 },
+  confirmBannerText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.confirmText },
 });

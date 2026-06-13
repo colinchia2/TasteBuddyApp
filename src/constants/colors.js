@@ -24,6 +24,12 @@ export const COLORS = {
   tierTBE: '#FEFCE8',
   tierTBEText: '#713F12',
 
+  // Location-confirm panel (calm yellow — Add a Place / Log a Visit). Same hex
+  // as TBE; named separately so the confirm UI reads as a confirmation, not a
+  // tier. Must match design_tokens.css --confirm-bg / --confirm-text.
+  confirmBg: '#FEFCE8',
+  confirmText: '#713F12',
+
   // Pills — must match design_tokens.css (--pill-cat-* / --pill-cui-*). No borders.
   pillCatBg: '#85B7EB',
   pillCatText: '#042C53',
