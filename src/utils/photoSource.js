@@ -3,6 +3,7 @@
 // each screen's EXISTING /api/photos/upload path (no new endpoint, no dup logic).
 import { Platform, ActionSheetIOS, Alert, Linking } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
+import * as ImagePicker from 'expo-image-picker';
 
 // Build an uploadable multipart filename with an extension the server accepts.
 // expo-image-picker (especially multi-select) can hand back a uri with no/odd
@@ -16,27 +17,66 @@ export function safePhotoName(uri) {
   return _UPLOAD_EXTS.includes(ext) ? last : 'photo.jpg';
 }
 
-// Options sheet with "Last photo taken" as the top option.
-export function presentPhotoSource({ onLast, onLibrary }) {
+// Options sheet: Camera · Last photo taken · Choose from library. onCamera is
+// optional — callers that don't pass it simply omit the row.
+export function presentPhotoSource({ onCamera, onLast, onLibrary }) {
+  const opts = [];
+  if (onCamera) opts.push({ text: 'Take photo', onPress: onCamera });
+  opts.push({ text: 'Last photo taken', onPress: onLast });
+  opts.push({ text: 'Choose from library', onPress: onLibrary });
   if (Platform.OS === 'ios' && ActionSheetIOS) {
+    const labels = opts.map(o => o.text).concat('Cancel');
     ActionSheetIOS.showActionSheetWithOptions(
-      {
-        title: 'Add a photo',
-        options: ['Last photo taken', 'Choose from library', 'Cancel'],
-        cancelButtonIndex: 2,
-      },
-      (i) => {
-        if (i === 0) onLast();
-        else if (i === 1) onLibrary();
-      }
+      { title: 'Add a photo', options: labels, cancelButtonIndex: opts.length },
+      (i) => { if (i < opts.length) opts[i].onPress?.(); }
     );
   } else {
-    Alert.alert('Add a photo', undefined, [
-      { text: 'Last photo taken', onPress: onLast },
-      { text: 'Choose from library', onPress: onLibrary },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    Alert.alert('Add a photo', undefined,
+      opts.concat({ text: 'Cancel', style: 'cancel' }));
   }
+}
+
+// Camera capture → onUri(localUri). Requests camera permission first (graceful
+// denial). After a successful capture, saves the photo to the device library
+// (Colin's ask — library-picked photos are already there; captures are not), via
+// expo-media-library write/add permission. Saving is best-effort: a save failure
+// never blocks attaching the photo to the visit. The returned uri is uploaded
+// through the EXISTING api.uploadFile() (expo-file-system) path — never
+// fetch+FormData (New-Arch rejects file parts).
+export async function capturePhoto({ onUri }) {
+  let perm;
+  try {
+    perm = await ImagePicker.requestCameraPermissionsAsync();
+  } catch (e) {
+    Alert.alert('Camera unavailable', 'Could not access the camera.');
+    return;
+  }
+  if (!perm || !perm.granted) {
+    Alert.alert(
+      'Camera access needed',
+      'Enable camera access for TasteBuddy in Settings to take a photo.',
+      [{ text: 'Open Settings', onPress: () => Linking.openSettings() }, { text: 'Cancel', style: 'cancel' }],
+    );
+    return;
+  }
+  let result;
+  try {
+    result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.9,
+    });
+  } catch (e) {
+    Alert.alert('Camera error', 'Something went wrong taking the photo.');
+    return;
+  }
+  if (result.canceled || !result.assets?.length) return;
+  const uri = result.assets[0].uri;
+  // Save the capture to the camera roll (best-effort, add-only permission).
+  try {
+    const can = await MediaLibrary.requestPermissionsAsync(true); // writeOnly = add
+    if (can?.granted) await MediaLibrary.saveToLibraryAsync(uri);
+  } catch (_) { /* non-fatal — still attach to the visit */ }
+  onUri(uri);
 }
 
 // Resolve the most-recent photo to an uploadable LOCAL uri.

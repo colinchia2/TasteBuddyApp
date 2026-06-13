@@ -165,6 +165,15 @@ export default function PersonasBrowseScreen({ navigation }) {
             {p.description ? (
               <Text style={styles.personaDesc} numberOfLines={3}>{p.description}</Text>
             ) : null}
+            {/* Ask this curated persona's AI — arms the HomeScreen chat with
+                kind:'curated' so it sends persona_id (web parity: /ask?persona=<id>). */}
+            <TouchableOpacity
+              style={styles.askAiBtn}
+              onPress={() => navigation.navigate('Home', {
+                personaAsk: { id: p.id, name: p.name, kind: 'curated' },
+              })}>
+              <Text style={styles.askAiBtnText}>✦ Ask {p.name.split(' ')[0]}'s AI</Text>
+            </TouchableOpacity>
           </View>
         ))}
 
@@ -210,6 +219,9 @@ const styles = StyleSheet.create({
   personaMeta: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight, marginTop: 3 },
   personaDesc: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#444',
                  lineHeight: 19, marginTop: 8 },
+  askAiBtn: { alignSelf: 'flex-start', marginTop: 10, backgroundColor: COLORS.goldLight,
+              borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  askAiBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 12.5, color: COLORS.gold },
   followBtn: { backgroundColor: COLORS.gold, borderRadius: 20, paddingHorizontal: 16,
                paddingVertical: 7, minWidth: 86, alignItems: 'center' },
   followingBtn: { backgroundColor: COLORS.goldLight },

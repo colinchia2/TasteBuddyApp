@@ -19,11 +19,13 @@ import { api, BASE_URL } from '../api/client';
 // the API host prefixed, same idiom as EditVisitScreen.
 const absUrl = (u) => (u && u.startsWith('http') ? u : `${BASE_URL}${u}`);
 
-// Recent-photos row: non-scrolling, show only as many thumbs as fit the card
-// width (card = 14 margin + 16 padding each side = 60; thumb 108 + 8 gap).
-const RECENT_THUMB = 108, RECENT_GAP = 8;
-const RECENT_FIT = Math.max(1, Math.floor(
-  (Dimensions.get('window').width - 60 + RECENT_GAP) / (RECENT_THUMB + RECENT_GAP)));
+// Recent-photos row: non-scrolling, EXACTLY 3 thumbs across the card width
+// (A3 / Rule 5). Card inner = window − (14 margin + 16 padding) each side = 60.
+// Derive the tile width from that inner width so 3 + 2 gaps always fit (no
+// horizontal scroll); 108px was hardcoded and only landed 2.
+const RECENT_GAP = 8, RECENT_FIT = 3;
+const RECENT_THUMB = Math.floor(
+  (Dimensions.get('window').width - 60 - RECENT_GAP * (RECENT_FIT - 1)) / RECENT_FIT);
 
 function TierBadge({ tier, label, small }) {
   const c = TIER_COLORS[tier] || { bg: COLORS.tierTBE, text: COLORS.tierTBEText };
@@ -179,23 +181,53 @@ export default function PersonaProfileScreen({ navigation, route }) {
             {recent_photos.length ? (
               // Non-scrolling row — only the thumbs that fit; rest clipped (no
               // second horizontal scroller; Highlights below keeps its scroll).
-              <View style={{ flexDirection: 'row', overflow: 'hidden', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', overflow: 'hidden', marginBottom: 6, gap: RECENT_GAP }}>
                 {recent_photos.slice(0, RECENT_FIT).map((ph, i) => (
-                  <Image key={`${ph.url}-${i}`} source={{ uri: absUrl(ph.url) }} style={styles.recentPhoto} />
+                  <Image key={`${ph.url}-${i}`} source={{ uri: absUrl(ph.url) }}
+                         style={[styles.recentPhoto, { width: RECENT_THUMB, height: RECENT_THUMB }]} />
                 ))}
               </View>
             ) : null}
             {recent_checkins.map((ci, i) => {
               const tc = TIER_COLORS[ci.tier] || { bg: COLORS.tierTBE, text: COLORS.tierTBEText };
+              // Field order (web ↔ app identical): Tier · Place · Category ·
+              // Cuisine(s) · Occasion · Party size · Time · Date. time_str is
+              // pre-formatted naive-local server-side (Rule 9 — never new Date()).
+              const meta = [ci.occasion, ci.party_size ? `Party of ${ci.party_size}` : null,
+                            ci.time_str, ci.date_str].filter(Boolean).join(' · ');
               return (
                 <View key={`${ci.slug}-${i}`} style={[styles.visitRow, i > 0 && styles.visitRowBorder]}>
-                  <View style={[styles.visitTierSquare, { backgroundColor: tc.bg }]}>
-                    <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 12, color: tc.text }}>{ci.tier_label}</Text>
+                  <View style={styles.visitTopRow}>
+                    <View style={[styles.visitTierSquare, { backgroundColor: tc.bg }]}>
+                      <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 12, color: tc.text }}>{ci.tier_label}</Text>
+                    </View>
+                    <Text style={styles.visitName} numberOfLines={1}>{ci.place_name}</Text>
                   </View>
-                  <Text style={styles.visitName} numberOfLines={1}>{ci.place_name}</Text>
-                  <Text style={styles.visitMeta}>
-                    {ci.date_str}{ci.meal_period ? ` · ${ci.meal_period}` : ''}
-                  </Text>
+                  {ci.categories?.length ? (
+                    <View style={styles.visitPills}>
+                      {ci.categories.map((c, j) => (
+                        <React.Fragment key={j}>
+                          {/* Tap → Rankings scoped to this category/cuisine (mirrors
+                              the Top pills + web Recent-Check-in pill links, Fix 2). */}
+                          <TouchableOpacity activeOpacity={0.7}
+                            onPress={() => navigation.navigate('Rankings', { categoryName: c.category })}>
+                            <View style={[styles.visitPill, { backgroundColor: COLORS.pillCatBg }]}>
+                              <Text style={[styles.visitPillText, { color: COLORS.pillCatText }]}>{c.category}</Text>
+                            </View>
+                          </TouchableOpacity>
+                          {c.cuisine ? (
+                            <TouchableOpacity activeOpacity={0.7}
+                              onPress={() => navigation.navigate('Rankings', { cuisine: c.cuisine })}>
+                              <View style={[styles.visitPill, { backgroundColor: COLORS.pillCuiBg }]}>
+                                <Text style={[styles.visitPillText, { color: COLORS.pillCuiText }]}>{c.cuisine}</Text>
+                              </View>
+                            </TouchableOpacity>
+                          ) : null}
+                        </React.Fragment>
+                      ))}
+                    </View>
+                  ) : null}
+                  {meta ? <Text style={styles.visitMetaLine}>{meta}</Text> : null}
                 </View>
               );
             })}
@@ -223,7 +255,7 @@ export default function PersonaProfileScreen({ navigation, route }) {
         {/* Ask AI — dark/gold destination at the bottom (the payoff). Flat dark
             fill ≈ the web gradient. Chips + button behavior unchanged. */}
         <View style={styles.aiCard}>
-          <Text style={styles.aiTitle}>Ask {first}'s AI</Text>
+          <Text style={styles.aiTitle}>Ask {identity.display_name}'s TasteBuddy AI</Text>
           <Text style={styles.aiSub}>
             It knows all {micro_stats.visits} of {first}'s visits and rankings. Ask it like you'd ask {first}.
           </Text>
@@ -236,7 +268,7 @@ export default function PersonaProfileScreen({ navigation, route }) {
             ))}
           </View>
           <TouchableOpacity style={styles.aiBtn} onPress={() => askWithPrompt('')}>
-            <Text style={styles.aiBtnText}>Ask {first}'s AI anything</Text>
+            <Text style={styles.aiBtnText}>Ask {identity.display_name}'s TasteBuddy AI Anything</Text>
           </TouchableOpacity>
         </View>
 
@@ -288,12 +320,17 @@ const styles = StyleSheet.create({
                   flexShrink: 1, marginLeft: 6, textAlign: 'right' },
   placeName: { fontFamily: 'Outfit_700Bold', fontSize: 15, marginTop: 2 },
   placeMeta: { fontFamily: 'DMSans_400Regular', fontSize: 11, opacity: 0.75, marginTop: 3 },
-  recentPhoto: { width: 108, height: 108, borderRadius: 13, marginRight: 8 },
-  visitRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11 },
+  recentPhoto: { borderRadius: 13 },   // width/height set inline (RECENT_THUMB) — A3 fits 3
+  visitRow: { paddingVertical: 11 },   // column — multi-category rows grow taller (A4)
   visitRowBorder: { borderTopWidth: 0.5, borderColor: COLORS.borderLight },
+  visitTopRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   visitTierSquare: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   visitName: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text, flexShrink: 1 },
-  visitMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textLight, marginLeft: 'auto' },
+  // Category/Cuisine pills — locked tokens, NO borders. Wrap when several.
+  visitPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginLeft: 37 },
+  visitPill: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+  visitPillText: { fontFamily: 'DMSans_500Medium', fontSize: 11 },
+  visitMetaLine: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textLight, marginTop: 5, marginLeft: 37 },
   highlightPhoto: { width: 150, height: 110, borderRadius: 10 },
   highlightCaption: { fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textMuted,
                       flexShrink: 1 },

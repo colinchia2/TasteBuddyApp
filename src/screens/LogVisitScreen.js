@@ -9,7 +9,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import ScreenHeader from '../components/ScreenHeader';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
-import { presentPhotoSource, pickLastPhoto } from '../utils/photoSource';
+import { presentPhotoSource, pickLastPhoto, capturePhoto } from '../utils/photoSource';
 import { fetchBlendedPlaces } from '../utils/placeSearch';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -395,7 +395,8 @@ export default function LogVisitScreen({ navigation, route }) {
   // ── Photos ────────────────────────────────────────────────────────────────────
   function addPhoto() {
     presentPhotoSource({
-      // Log a Visit defers upload until save — both options just queue the uri.
+      // Log a Visit defers upload until save — every option just queues the uri.
+      onCamera: () => capturePhoto({ onUri: (uri) => setPhotos(prev => [...prev, { uri }]) }),
       onLast: () => pickLastPhoto({
         onUri: (uri) => setPhotos(prev => [...prev, { uri }]),
         onLibrary: pickPhoto,

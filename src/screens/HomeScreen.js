@@ -129,8 +129,10 @@ export default function HomeScreen({ navigation, route }) {
   const [awaitingFirstToken, setAwaitingFirstToken] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(LOADING_PHASES[0]);
   const [conversationId, setConversationId] = useState(null);
-  // Cross-user AI target ({id, name}) — set via the Persona profile's chips;
-  // null = normal self chat. Sent as persona_user_id on every chat call.
+  // Persona AI target ({id, name, kind}) — null = normal self chat. kind='user'
+  // (cross-user, from the Persona profile chips → persona_user_id) or 'curated'
+  // (a TastiePersona, from the Personas browse screen → persona_id). One banner,
+  // one reset for both.
   const [personaAsk, setPersonaAsk] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
   const [unreadNotifs, setUnreadNotifs] = useState(0);   // bell badge — same count as web
@@ -222,7 +224,10 @@ export default function HomeScreen({ navigation, route }) {
   useEffect(() => {
     const pa = route?.params?.personaAsk;
     if (!pa) return;
-    setPersonaAsk({ id: pa.id, name: pa.name });
+    // kind distinguishes a CURATED persona (TastiePersona → persona_id) from a
+    // CROSS-USER persona (another user → persona_user_id). Missing = 'user' (the
+    // existing cross-user entry from PersonaProfileScreen doesn't send a kind).
+    setPersonaAsk({ id: pa.id, name: pa.name, kind: pa.kind || 'user' });
     if (pa.prompt) setInputText(pa.prompt);
     setChatActive(true);
     navigation.setParams({ personaAsk: undefined });
@@ -370,7 +375,10 @@ export default function HomeScreen({ navigation, route }) {
         {
           message: msg, conversation_id: convId,
           lat: coords ? coords.lat : null, lng: coords ? coords.lng : null,
-          persona_user_id: personaAsk ? personaAsk.id : null,
+          // Curated → persona_id; cross-user → persona_user_id. Kept DISTINCT
+          // (backend validates each separately); only one is ever non-null.
+          persona_user_id: personaAsk && personaAsk.kind !== 'curated' ? personaAsk.id : null,
+          persona_id: personaAsk && personaAsk.kind === 'curated' ? personaAsk.id : null,
         },
         {
           signal: controller.signal,
@@ -426,7 +434,9 @@ export default function HomeScreen({ navigation, route }) {
             body: JSON.stringify({
               message: msg, conversation_id: convId,
               lat: coords ? coords.lat : null, lng: coords ? coords.lng : null,
-              persona_user_id: personaAsk ? personaAsk.id : null,
+              // Curated → persona_id; cross-user → persona_user_id (distinct).
+              persona_user_id: personaAsk && personaAsk.kind !== 'curated' ? personaAsk.id : null,
+              persona_id: personaAsk && personaAsk.kind === 'curated' ? personaAsk.id : null,
             }),
           });
           if (data.conversation_id) setConversationId(data.conversation_id);

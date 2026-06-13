@@ -8,7 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { api, BASE_URL } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
-import { presentPhotoSource, pickLastPhoto } from '../utils/photoSource';
+import { presentPhotoSource, pickLastPhoto, capturePhoto } from '../utils/photoSource';
 
 function fmtDate(d) {
   const y = d.getFullYear();
@@ -142,6 +142,7 @@ export default function EditVisitScreen({ navigation, route }) {
 
   function addPhoto() {
     presentPhotoSource({
+      onCamera: () => capturePhoto({ onUri: uploadOnePhoto }),
       onLast: () => pickLastPhoto({ onUri: uploadOnePhoto, onLibrary: pickPhoto }),
       onLibrary: pickPhoto,
     });
