@@ -33,8 +33,8 @@ eas submit --platform ios --latest    # internal TestFlight only; never submit f
 ## Conventions & docs (web repo holds the canonical detail)
 - **Datetime (Rule 9):** visit/check-in times are **naive-local** strings — NEVER `new Date(storedValue)`
   (Hermes parses zone-less ISO as UTC and shifts the day); build dates from local Y/M/D
-  (`localDateFromYMD`). Full rule: web repo `CLAUDE_CODE_PREAMBLE.md` (Rule 9).
-- **Cross-platform parity, endpoints, schema:** web repo `ARCHITECTURE.md`. This cycle's changes: `BUILD LOG.md`.
+  (`localDateFromYMD`). Full rule: web repo `docs/CLAUDE_CODE_PREAMBLE.md` (Rule 9).
+- **Cross-platform parity, endpoints, schema:** web repo `docs/ARCHITECTURE.md`. This cycle's changes: `docs/BUILD LOG.md`.
 
 ## Auth
 - JWT tokens stored in AsyncStorage (`access_token`, `refresh_token`)
