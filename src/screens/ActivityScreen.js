@@ -295,6 +295,7 @@ export default function ActivityScreen({ navigation }) {
                     placeId: item.place_id,
                     placeName: item.name,
                     checkinId: item.checkin_id,
+                    checkinAt: item.date,   // seed date/time from when the check-in happened
                   })}
                 >
                   <Text style={styles.continueBtnText}>Continue</Text>

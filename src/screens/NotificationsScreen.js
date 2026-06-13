@@ -33,6 +33,11 @@ function handleNotificationTap(item, navigation) {
       placeId: item.related_place_id,
       placeName: item.place_name || '',
       checkinId: item.pending_checkin_id || null,
+      // Seeds the date/meal chips from when the check-in happened. The
+      // notification payload doesn't currently include checkin_at, so this is
+      // null today (form falls back to the current device time) — forward-
+      // compatible once /api/notifications exposes the check-in time.
+      checkinAt: item.checkin_at || null,
     });
   }
 }

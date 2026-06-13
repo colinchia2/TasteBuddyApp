@@ -17,13 +17,22 @@ import { fetchBlendedPlaces } from '../utils/placeSearch';
 // Must match the web set + order (base.html #lv-occasion-btns) — cross-platform parity.
 const OCCASIONS = ['Solo', 'Date Night', 'Friends', 'Family', 'Business', 'Birthday', 'Celebration', 'Other'];
 const PARTY_SIZES = [1, 2, 3, 4, 5]; // 5 displays as '4+'
-const TOD_CHIPS = [
-  { label: 'Breakfast', minutes: 9 * 60 },
-  { label: 'Brunch',    minutes: 11 * 60 },
-  { label: 'Lunch',     minutes: 12 * 60 + 30 },
-  { label: 'Dinner',    minutes: 19 * 60 },
-  { label: 'Late Night',minutes: 22 * 60 },
-];
+// Must match the web set + order (base.html #lv-tod-chips). The chip is DERIVED
+// from the clock time and never sets it (see mealForMinutes / pickTOD / shiftTime).
+const TOD_CHIPS = ['Breakfast', 'Brunch', 'Lunch', 'Afternoon', 'Dinner', 'Late Night'];
+
+// Meal-period buckets by minutes-of-day (must match web lvMealForMinutes):
+//   Breakfast 5:00–9:59 · Brunch 10:00–11:30 · Lunch 11:31–13:59 ·
+//   Afternoon 14:00–16:59 · Dinner 17:00–21:59 · Late Night 22:00–4:59
+function mealForMinutes(mins) {
+  mins = ((mins % 1440) + 1440) % 1440;
+  if (mins >= 300 && mins <= 599) return 'Breakfast';
+  if (mins >= 600 && mins <= 690) return 'Brunch';
+  if (mins >= 691 && mins <= 839) return 'Lunch';
+  if (mins >= 840 && mins <= 1019) return 'Afternoon';
+  if (mins >= 1020 && mins <= 1319) return 'Dinner';
+  return 'Late Night'; // 22:00–4:59
+}
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -112,10 +121,31 @@ function nearestHour() {
   return mins % (24 * 60);
 }
 
+// Resume-from-check-in prefill: split the naive-LOCAL 'YYYY-MM-DDTHH:MM[:SS]'
+// (Rule 9 — never new Date(iso), Hermes would shift the day). Returns the
+// visit's date string + minutes-of-day so the form reflects WHEN the check-in
+// happened (date chip + meal chip both derive from these).
+function parseCheckinPrefill(iso) {
+  if (!iso) return null;
+  const [datePart, timePart] = String(iso).split('T');
+  const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(datePart || '');
+  const m = /^(\d{1,2}):(\d{2})/.exec(timePart || '');
+  return {
+    date: dateOk ? datePart : null,
+    mins: m ? (+m[1]) * 60 + (+m[2]) : null,
+  };
+}
+
 export default function LogVisitScreen({ navigation, route }) {
   const paramPlaceId = route.params?.placeId;
   const paramPlaceName = route.params?.placeName;
   const paramCheckinId = route.params?.checkinId || null;
+  // Resume-from-check-in: when the caller passes the check-in time, seed the
+  // form's date + time from it (so the date/meal chips reflect WHEN it happened).
+  // Absent → fresh log defaults to the current device date/time.
+  const checkinPrefill = parseCheckinPrefill(route.params?.checkinAt);
+  const initMins = (checkinPrefill && checkinPrefill.mins != null) ? checkinPrefill.mins : nearestHour();
+  const initDate = (checkinPrefill && checkinPrefill.date) || fmtDate(new Date());
   const paramPrefillSearch = route.params?.prefillSearch || '';
   const paramFromActionCard = route.params?.fromActionCard || null;
   const paramAfterSaveNav = route.params?.afterSaveNav || null;
@@ -162,10 +192,11 @@ export default function LogVisitScreen({ navigation, route }) {
   // Single source of truth for the visit date (naive-local 'YYYY-MM-DD'). Chips and
   // the calendar picker both set THIS — so the picker reflects a chip tap and the
   // logged date always matches what's shown.
-  const [selectedDate, setSelectedDate] = useState(fmtDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState(initDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [selectedTOD, setSelectedTOD] = useState(null);
-  const [timeMinutes, setTimeMinutes] = useState(nearestHour);
+  // Meal chip is DERIVED from the time — pre-selected on load, never empty.
+  const [timeMinutes, setTimeMinutes] = useState(initMins);
+  const [selectedTOD, setSelectedTOD] = useState(() => mealForMinutes(initMins));
   const [occasions, setOccasions] = useState([]);
   const [partySize, setPartySize] = useState(null);
   const [notes, setNotes] = useState('');
@@ -365,17 +396,18 @@ export default function LogVisitScreen({ navigation, route }) {
   // ── Time helpers ──────────────────────────────────────────────────────────────
   function shiftTime(delta) {
     setTimeMinutes(prev => {
-      const next = prev + delta;
-      if (next < 0) return next + 24 * 60;
-      if (next >= 24 * 60) return next - 24 * 60;
+      let next = prev + delta;
+      if (next < 0) next += 24 * 60;
+      if (next >= 24 * 60) next -= 24 * 60;
+      // Re-derive the meal chip from the new time (never clear it).
+      setSelectedTOD(mealForMinutes(next));
       return next;
     });
-    setSelectedTOD(null);
   }
 
-  function pickTOD(chip) {
-    setSelectedTOD(chip.label);
-    setTimeMinutes(chip.minutes);
+  // Manual meal selection — sets the chip only; never changes the clock time.
+  function pickTOD(label) {
+    setSelectedTOD(label);
   }
 
   // ── Occasion (single-select, B2) ──────────────────────────────────────────────
@@ -550,9 +582,10 @@ export default function LogVisitScreen({ navigation, route }) {
 
   // ── Render: form ──────────────────────────────────────────────────────────────
   const activeCatCount = categories.filter(c => checkedCats[c.user_place_id]).length;
-  // Required set (B2): ≥1 category, a time of day, exactly one occasion, a party
-  // size. Submit-time Alerts above explain each; this just gates the button.
-  const canSave = activeCatCount > 0 && !!selectedTOD && occasions.length > 0 && !!partySize && !saving;
+  // Button stays pressable (except mid-save) — like the web, validation happens
+  // on submit() with a popup pointing at the first missing field, rather than
+  // silently disabling the button.
+  const canSave = !saving;
 
   // New-place gate: this place has ZERO category memberships (an orphan — e.g. a
   // GPS check-in not yet categorised). Intercept BEFORE the log form so the user
@@ -784,14 +817,14 @@ export default function LogVisitScreen({ navigation, route }) {
           {/* ── 3. Time of day ── */}
           <Text style={styles.sectionLabel}>Time of Day</Text>
           <View style={styles.chipRow}>
-            {TOD_CHIPS.map(chip => (
+            {TOD_CHIPS.map(label => (
               <TouchableOpacity
-                key={chip.label}
-                style={[styles.chip, selectedTOD === chip.label && styles.chipActive]}
-                onPress={() => pickTOD(chip)}
+                key={label}
+                style={[styles.chip, selectedTOD === label && styles.chipActive]}
+                onPress={() => pickTOD(label)}
               >
-                <Text style={[styles.chipText, selectedTOD === chip.label && styles.chipTextActive]}>
-                  {chip.label}
+                <Text style={[styles.chipText, selectedTOD === label && styles.chipTextActive]}>
+                  {label}
                 </Text>
               </TouchableOpacity>
             ))}

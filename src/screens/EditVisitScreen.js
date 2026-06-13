@@ -43,6 +43,7 @@ const TOD_CHIPS = [
   { label: 'Breakfast', value: 'Breakfast' },
   { label: 'Brunch',    value: 'Brunch' },
   { label: 'Lunch',     value: 'Lunch' },
+  { label: 'Afternoon', value: 'Afternoon' },
   { label: 'Dinner',    value: 'Dinner' },
   { label: 'Late Night',value: 'Late Night' },
 ];
