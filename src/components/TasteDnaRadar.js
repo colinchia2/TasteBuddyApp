@@ -16,7 +16,10 @@ const GOLD = COLORS.gold;                   // #C8960C
 const GRID = 'rgba(200,150,12,0.20)';       // soft-gold grid on the Taste Card
 const INK = COLORS.dnaRadarInk;             // #1C1A17
 
-export default function TasteDnaRadar({ dna, size = 320 }) {
+// showLeanLine: the persona Taste Card renders its own subtitle ABOVE the radar
+// (PersonaProfileScreen), so it passes false to suppress the in-radar copy here.
+// Other surfaces (SettingsScreen) keep the default lean line below the radar.
+export default function TasteDnaRadar({ dna, size = 320, showLeanLine = true }) {
   if (!dna || !Array.isArray(dna.axes) || !dna.axes.length) return null;
   const axes = dna.axes;
   const n = axes.length;
@@ -84,9 +87,11 @@ export default function TasteDnaRadar({ dna, size = 320 }) {
           );
         })}
       </Svg>
-      <Text style={{ fontFamily: 'DMSans_600SemiBold', fontSize: 13, color: '#5a4a22', marginTop: 2 }}>
-        {leanLine}
-      </Text>
+      {showLeanLine ? (
+        <Text style={{ fontFamily: 'DMSans_600SemiBold', fontSize: 13, color: '#5a4a22', marginTop: 2 }}>
+          {leanLine}
+        </Text>
+      ) : null}
       {dna.low_confidence ? (
         <Text style={{ fontFamily: 'DMSans_400Regular', fontSize: 11, color: COLORS.textLight, marginTop: 2 }}>
           Still learning your taste — log more visits to sharpen this.

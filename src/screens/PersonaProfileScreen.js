@@ -91,17 +91,21 @@ export default function PersonaProfileScreen({ navigation, route }) {
             every value appears ONCE, here. Solid warm fill ≈ the web gold
             gradient (real gradient bg deferred — REMINDER_app_gradient_upgrade.md). */}
         <View style={styles.tasteCard}>
-          {/* Score seal (corner badge) */}
+          {/* Top-left label so the user knows what this is. */}
+          <Text style={styles.cardKicker}>Tastie Score Card</Text>
+          {/* Score seal (corner badge), labelled "Tastie Score". */}
           <View style={styles.seal}>
             <Text style={styles.sealNum}>{tastie.score}</Text>
-            <Text style={styles.sealLabel}>SCORE</Text>
+            <Text style={styles.sealLabel}>Tastie Score</Text>
           </View>
-          {/* Rank headline (Hero-swappable archetype slot) + name */}
-          <Text style={styles.cardRank}>{tastie.rank_title || tastie.label}</Text>
+          {/* Display name → archetype → subtitle (lean_line, italic, centered). */}
           <Text style={styles.cardName}>{identity.display_name}</Text>
           {identity.vibe_tag ? <Text style={styles.cardVibe}>{identity.vibe_tag}</Text> : null}
-          {/* TAGLINE SLOT — Hero prompt fills the archetype subtitle here. */}
-          {taste_dna ? <TasteDnaRadar dna={taste_dna} size={300} /> : null}
+          <Text style={styles.cardRank}>{tastie.rank_title || tastie.label}</Text>
+          {taste_dna && taste_dna.lean_line ? (
+            <Text style={styles.cardSubtitle}>{taste_dna.lean_line}</Text>
+          ) : null}
+          {taste_dna ? <TasteDnaRadar dna={taste_dna} size={300} showLeanLine={false} /> : null}
           {/* Footer stats */}
           <View style={styles.cardStats}>
             {[['Visits', micro_stats.visits], ['Places', micro_stats.places],
@@ -289,19 +293,28 @@ const styles = StyleSheet.create({
   tasteCard: { backgroundColor: COLORS.personaCardFill, borderWidth: 2.5,
                borderColor: COLORS.personaCardBorder, borderRadius: 24,
                marginHorizontal: 14, marginTop: 12, paddingHorizontal: 18,
-               paddingTop: 22, paddingBottom: 16, alignItems: 'center', overflow: 'hidden',
+               paddingTop: 14, paddingBottom: 16, alignItems: 'center', overflow: 'hidden',
                shadowColor: '#C8960C', shadowOpacity: 0.16, shadowRadius: 14,
                shadowOffset: { width: 0, height: 8 } },
+  // Top-left kicker — flows first (left-aligned), seal sits absolute top-right.
+  cardKicker: { alignSelf: 'flex-start', fontFamily: 'DMSans_700Bold', fontSize: 9,
+                letterSpacing: 0.6, textTransform: 'uppercase', color: '#9A7212',
+                marginBottom: 8, maxWidth: '64%' },
   seal: { position: 'absolute', top: 14, right: 14, width: 60, height: 60, borderRadius: 30,
           backgroundColor: '#FBE7BE', alignItems: 'center', justifyContent: 'center',
           borderWidth: 2, borderColor: 'rgba(200,150,12,0.30)' },
   sealNum: { fontFamily: 'Outfit_700Bold', fontSize: 20, lineHeight: 22, color: COLORS.gold },
-  sealLabel: { fontFamily: 'Outfit_700Bold', fontSize: 7.5, letterSpacing: 1, color: '#9A7212', marginTop: 1 },
-  cardRank: { fontFamily: 'Outfit_700Bold', fontSize: 11, letterSpacing: 1.6,
-              textTransform: 'uppercase', color: COLORS.gold, marginTop: 2 },
-  cardName: { fontFamily: 'Outfit_800ExtraBold', fontSize: 28, color: COLORS.text, marginTop: 2 },
+  sealLabel: { fontFamily: 'Outfit_700Bold', fontSize: 7, letterSpacing: 0.2, color: '#9A7212',
+               marginTop: 1, textAlign: 'center', maxWidth: 52 },
+  cardName: { fontFamily: 'Outfit_800ExtraBold', fontSize: 28, color: COLORS.text,
+              marginTop: 2, textAlign: 'center' },
   cardVibe: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#9A7212',
-              fontStyle: 'italic', marginTop: 1 },
+              fontStyle: 'italic', marginTop: 1, textAlign: 'center' },
+  cardRank: { fontFamily: 'Outfit_700Bold', fontSize: 11, letterSpacing: 1.6,
+              textTransform: 'uppercase', color: COLORS.gold, marginTop: 4, textAlign: 'center' },
+  // Subtitle = the deterministic lean_line, italic + centered, under the archetype.
+  cardSubtitle: { fontFamily: 'DMSans_400Regular', fontStyle: 'italic', fontSize: 13,
+                  color: '#5a4a22', textAlign: 'center', marginTop: 5, paddingHorizontal: 12 },
   cardStats: { flexDirection: 'row', alignSelf: 'stretch', marginTop: 12, paddingTop: 12,
                borderTopWidth: 1, borderTopColor: 'rgba(200,150,12,0.18)' },
   cardStat: { flex: 1, alignItems: 'center' },
