@@ -1,0 +1,16 @@
+# Normalize line endings: store text with LF in the repo AND keep LF in the
+# working tree, so Git stops emitting "LF will be replaced by CRLF" warnings on
+# Windows.
+* text=auto eol=lf
+
+# Binary assets — never touch their bytes.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
