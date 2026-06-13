@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import { COLORS } from '../constants/colors';
 import MarkdownMessage from '../components/MarkdownMessage';
+import PlaceCardModal from '../components/PlaceCardModal';
 import TBLogo from '../components/TBLogo';
 import AddPlaceActionCard from '../components/actions/AddPlaceActionCard';
 import LogVisitActionCard from '../components/actions/LogVisitActionCard';
@@ -135,6 +136,7 @@ export default function HomeScreen({ navigation, route }) {
   // one reset for both.
   const [personaAsk, setPersonaAsk] = useState(null);
   const [completedActions, setCompletedActions] = useState({});
+  const [savedPlace, setSavedPlace] = useState(null);   // Theme 3: owned place tapped in chat → PlaceCardModal
   const [unreadNotifs, setUnreadNotifs] = useState(0);   // bell badge — same count as web
   const [suggestedPrompts, setSuggestedPrompts] = useState(SUGGESTED_PROMPTS);
   const scrollRef = useRef(null);
@@ -321,8 +323,18 @@ export default function HomeScreen({ navigation, route }) {
       followUps: clarifyQuestions ? [] : serverFollowUps,
       followUpsKind: clarifyQuestions ? null : (evt.followups_kind || null),
       actions: evt.actions || [],
+      // Theme 3: full rankings-shaped cards for owned places named in the answer, so a
+      // tap opens PlaceCardModal in-place (same object the Rankings screen passes).
+      savedMentions: Array.isArray(evt.saved_mentions) ? evt.saved_mentions : [],
       streaming: false,
     };
+  }
+
+  // Open the in-app PlaceCardModal for an owned place tapped in chat. Looks the place up
+  // in that message's saved_mentions by slug; a missing slug is a graceful no-op.
+  function openSavedPlace(slug, mentions) {
+    const place = (mentions || []).find((m) => m && m.slug === slug);
+    if (place) setSavedPlace(place);
   }
 
   // Replace the in-flight streaming AI bubble with `next`, or append it if none.
@@ -444,6 +456,7 @@ export default function HomeScreen({ navigation, route }) {
             response: data.response, mode: data.mode,
             is_clarifying: data.is_clarifying, questions: data.questions,
             actions: data.actions || [],
+            saved_mentions: data.saved_mentions || [],
             followups: data.followups || [],
             followups_kind: data.followups_kind || null,
           }));
@@ -680,7 +693,10 @@ export default function HomeScreen({ navigation, route }) {
                 ) : (
                   <View>
                     <View style={[styles.bubble, styles.bubbleAI]}>
-                      <MarkdownMessage text={msg.text} />
+                      <MarkdownMessage
+                        text={msg.text}
+                        onSavedPress={(slug) => openSavedPlace(slug, msg.savedMentions)}
+                      />
                       {msg.errorNote ? (
                         <Text style={styles.errorNote}>{msg.errorNote}</Text>
                       ) : null}
@@ -840,6 +856,15 @@ export default function HomeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
         </Animated.View>
+
+        {/* Theme 3: owned place tapped in chat → same read-only card as Rankings (the
+            saved_mentions objects are the exact _serialize_ranking_item shape). Category/
+            cuisine pills are non-tappable here (no in-screen ranking list to rescope). */}
+        <PlaceCardModal
+          place={savedPlace}
+          visible={!!savedPlace}
+          onClose={() => setSavedPlace(null)}
+        />
     </View>
   );
 }

@@ -2,65 +2,97 @@ import React from 'react';
 import { View, Text, StyleSheet, Linking } from 'react-native';
 import { COLORS } from '../constants/colors';
 
+// A link to one of the user's OWN places (Theme 3). Tapped → in-app PlaceCardModal
+// (via onSavedPress), NOT a browser. The server emits these as absolute
+// https://<host>/my-places/<slug> links so they survive markdown rendering.
+const MY_PLACES_RE = /\/my-places\/([^/?#\s]+)/;
+
 function parseInline(text) {
   const parts = [];
-  // bold | italic | [text](http(s)://url) markdown link
-  const regex = /(\*\*([^*]+)\*\*|_([^_\n]+)_|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\))/g;
+  // Order matters: emphasis-WRAPPED links first (**[x](url)** / *[x](url)* / _[x](url)_)
+  // so a bolded/italicized place name renders as ONE styled link instead of literal
+  // asterisks around raw markdown — the single-pass parser can't recurse. Then a plain
+  // link, then bold, then underscore-italic.
+  const regex = /(\*\*\[[^\]]+\]\(https?:\/\/[^)\s]+\)\*\*|\*\[[^\]]+\]\(https?:\/\/[^)\s]+\)\*|_\[[^\]]+\]\(https?:\/\/[^)\s]+\)_|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|\*\*[^*]+\*\*|_[^_\n]+_)/g;
+  const LINK = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/;
   let lastIndex = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, match.index), bold: false, italic: false });
+      parts.push({ text: text.slice(lastIndex, match.index) });
     }
-    if (match[0].startsWith('**')) {
-      parts.push({ text: match[2], bold: true, italic: false });
-    } else if (match[0].startsWith('[')) {
-      parts.push({ text: match[4], link: match[5], bold: false, italic: false });
-    } else {
-      parts.push({ text: match[3], bold: false, italic: true });
+    const tok = match[0];
+    const lm = tok.match(LINK);
+    if (lm) {
+      const bold = tok.startsWith('**');
+      const italic = tok.startsWith('*[') || tok.startsWith('_');
+      const mp = lm[2].match(MY_PLACES_RE);
+      if (mp) {
+        parts.push({ text: lm[1], saved: mp[1], bold, italic });
+      } else {
+        parts.push({ text: lm[1], link: lm[2], bold, italic });
+      }
+    } else if (tok.startsWith('**')) {
+      parts.push({ text: tok.slice(2, -2), bold: true });
+    } else {                       // _italic_
+      parts.push({ text: tok.slice(1, -1), italic: true });
     }
-    lastIndex = match.index + match[0].length;
+    lastIndex = match.index + tok.length;
   }
   if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), bold: false, italic: false });
+    parts.push({ text: text.slice(lastIndex) });
   }
-  return parts.length > 0 ? parts : [{ text, bold: false, italic: false }];
+  return parts.length > 0 ? parts : [{ text }];
 }
 
-function InlineText({ text, style }) {
+function InlineText({ text, style, onSavedPress }) {
   const parts = parseInline(text);
-  if (parts.length === 1 && !parts[0].bold && !parts[0].italic && !parts[0].link) {
+  if (parts.length === 1 && !parts[0].bold && !parts[0].italic && !parts[0].link && !parts[0].saved) {
     return <Text selectable style={style}>{parts[0].text}</Text>;
   }
   return (
     <Text selectable style={style}>
-      {parts.map((p, i) => (
-        p.link ? (
-          <Text
-            key={i}
-            style={styles.link}
-            onPress={() => Linking.openURL(p.link)}
-            suppressHighlighting={false}
-          >
-            {p.text}
-          </Text>
-        ) : (
-          <Text
-            key={i}
-            style={[
-              p.bold && { fontFamily: 'DMSans_700Bold' },
-              p.italic && { fontStyle: 'italic' },
-            ]}
-          >
-            {p.text}
-          </Text>
-        )
-      ))}
+      {parts.map((p, i) => {
+        const emph = [
+          p.bold && { fontFamily: 'DMSans_700Bold' },
+          p.italic && { fontStyle: 'italic' },
+        ];
+        // Owned place → open PlaceCardModal in-place (NOT Linking/browser). Styled like
+        // surrounding text (medium weight, never the blue/gold external-link look). With
+        // no handler it degrades to plain text — never crashes.
+        if (p.saved) {
+          return onSavedPress ? (
+            <Text
+              key={i}
+              style={[styles.savedLink, ...emph]}
+              onPress={() => onSavedPress(p.saved)}
+              suppressHighlighting={false}
+            >
+              {p.text}
+            </Text>
+          ) : (
+            <Text key={i} style={emph}>{p.text}</Text>
+          );
+        }
+        if (p.link) {
+          return (
+            <Text
+              key={i}
+              style={[styles.link, ...emph]}
+              onPress={() => Linking.openURL(p.link)}
+              suppressHighlighting={false}
+            >
+              {p.text}
+            </Text>
+          );
+        }
+        return <Text key={i} style={emph}>{p.text}</Text>;
+      })}
     </Text>
   );
 }
 
-export default function MarkdownMessage({ text }) {
+export default function MarkdownMessage({ text, onSavedPress }) {
   const lines = text.split('\n');
   const elements = [];
   let i = 0;
@@ -93,7 +125,7 @@ export default function MarkdownMessage({ text }) {
               return (
                 <View key={ri} style={[styles.tableRow, ri === bodyRows.length - 1 && { borderBottomWidth: 0 }]}>
                   {cells.map((c, ci) => (
-                    <InlineText key={ci} text={c} style={styles.tableCell} />
+                    <InlineText key={ci} text={c} style={styles.tableCell} onSavedPress={onSavedPress} />
                   ))}
                 </View>
               );
@@ -141,7 +173,7 @@ export default function MarkdownMessage({ text }) {
     if (bqM) {
       elements.push(
         <View key={i} style={styles.blockquote}>
-          <InlineText text={bqM[1]} style={styles.blockquoteText} />
+          <InlineText text={bqM[1]} style={styles.blockquoteText} onSavedPress={onSavedPress} />
         </View>
       );
       continue;
@@ -153,7 +185,7 @@ export default function MarkdownMessage({ text }) {
       elements.push(
         <View key={i} style={styles.recHeader}>
           <Text selectable style={styles.recTitle}>{recM[1].trim()}</Text>
-          {recM[2] ? <InlineText text={recM[2]} style={styles.recSub} /> : null}
+          {recM[2] ? <InlineText text={recM[2]} style={styles.recSub} onSavedPress={onSavedPress} /> : null}
         </View>
       );
       continue;
@@ -165,14 +197,14 @@ export default function MarkdownMessage({ text }) {
       elements.push(
         <View key={i} style={styles.bulletRow}>
           <Text style={styles.bulletDot}>●</Text>
-          <InlineText text={bulletM[1]} style={styles.bulletText} />
+          <InlineText text={bulletM[1]} style={styles.bulletText} onSavedPress={onSavedPress} />
         </View>
       );
       continue;
     }
 
     // Normal line
-    elements.push(<InlineText key={i} text={t} style={styles.normal} />);
+    elements.push(<InlineText key={i} text={t} style={styles.normal} onSavedPress={onSavedPress} />);
   }
 
   return <View>{elements}</View>;
@@ -194,6 +226,9 @@ const styles = StyleSheet.create({
   bulletText: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, lineHeight: 22 },
   normal: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, lineHeight: 22 },
   link: { color: COLORS.gold, textDecorationLine: 'underline' },
+  // Owned-place tap target (Theme 3): like surrounding text, medium weight, NOT the
+  // blue/gold external-link look — it opens an in-app modal, not a browser.
+  savedLink: { fontFamily: 'DMSans_500Medium' },
   table: { marginVertical: 10, borderWidth: 0.5, borderColor: COLORS.border, borderRadius: 8, overflow: 'hidden' },
   tableHeaderRow: { flexDirection: 'row', backgroundColor: COLORS.offWhite, borderBottomWidth: 1.5, borderBottomColor: COLORS.border },
   tableHeaderCell: { flex: 1, fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted, padding: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
