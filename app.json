@@ -16,7 +16,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.colinchia.tastebuddy",
-      "associatedDomains": ["applinks:tastebuddy-colinchia2.pythonanywhere.com"],
+      "associatedDomains": [
+        "applinks:tastebuddy-colinchia2.pythonanywhere.com"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -82,6 +84,17 @@
         "@react-native-google-signin/google-signin",
         {
           "iosUrlScheme": "com.googleusercontent.apps.918439480148-skp68m8e98idt494ejr1h1bf14q6mh7k"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "extraPods": [
+              { "name": "GoogleUtilities", "modular_headers": true },
+              { "name": "RecaptchaInterop", "modular_headers": true }
+            ]
+          }
         }
       ]
     ],
