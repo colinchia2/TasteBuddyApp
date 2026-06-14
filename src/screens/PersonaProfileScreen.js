@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import ScreenHeader from '../components/ScreenHeader';
 import TasteDnaRadar from '../components/TasteDnaRadar';
+import PlaceCardModal from '../components/PlaceCardModal';
 import { COLORS, TIER_COLORS } from '../constants/colors';
 import { api, BASE_URL } from '../api/client';
 
@@ -51,6 +52,7 @@ export default function PersonaProfileScreen({ navigation, route }) {
   const [error, setError] = useState(null);
   const [following, setFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
+  const [savedPlace, setSavedPlace] = useState(null);   // owned top-place tapped → PlaceCardModal
 
   // Resolve a deep-link username → userId (same no-leak 404 as everywhere).
   useEffect(() => {
@@ -121,6 +123,21 @@ export default function PersonaProfileScreen({ navigation, route }) {
   function shareMyPersona() {
     const url = `https://tastebuddy-colinchia2.pythonanywhere.com/u/${encodeURIComponent(identity.username || identity.display_name)}`;
     Share.share({ message: url, url }).catch(() => {});
+  }
+
+  // Tap a top place (C3b): own it → open YOUR card (viewer-side, your memberships/
+  // tier — never the owner's); don't own it → Add-a-Place prefilled with the place.
+  async function openTopPlace(tp) {
+    if (tp.already_saved && tp.saved_slug) {
+      try {
+        const card = await api.json(`/api/places/by-slug/${encodeURIComponent(tp.saved_slug)}`);
+        setSavedPlace(card);
+      } catch (e) {
+        Alert.alert('Error', e.message || 'Could not open this place.');
+      }
+    } else {
+      navigation.navigate('AddPlace', { googlePlaceId: tp.google_place_id, placeName: tp.name });
+    }
   }
 
   return (
@@ -224,7 +241,8 @@ export default function PersonaProfileScreen({ navigation, route }) {
               {top_places.map((tp) => {
                 const tc = TIER_COLORS[tp.tier] || { bg: COLORS.tierTBE, text: COLORS.tierTBEText };
                 return (
-                <View key={tp.slug} style={[styles.placeCard, { backgroundColor: tc.bg }]}>
+                <TouchableOpacity key={tp.slug} style={[styles.placeCard, { backgroundColor: tc.bg }]}
+                  activeOpacity={0.85} onPress={() => openTopPlace(tp)}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                     <View style={styles.placeTierSquare}>
                       <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 12, color: tc.text }}>{tp.tier_label}</Text>
@@ -235,7 +253,7 @@ export default function PersonaProfileScreen({ navigation, route }) {
                   <Text style={[styles.placeMeta, { color: tc.text }]} numberOfLines={1}>
                     {tp.category || '—'}{tp.cuisine ? ` · ${tp.cuisine}` : ''}
                   </Text>
-                </View>
+                </TouchableOpacity>
                 );
               })}
             </ScrollView>
@@ -345,6 +363,14 @@ export default function PersonaProfileScreen({ navigation, route }) {
         </LinearGradient>
 
       </ScrollView>
+      {/* Owned top-place tapped → the VIEWER's own card (same modal as chat/rankings). */}
+      <PlaceCardModal
+        place={savedPlace}
+        visible={!!savedPlace}
+        onClose={() => setSavedPlace(null)}
+        onCategoryPress={(name) => { setSavedPlace(null); navigation.navigate('Rankings', { categoryName: name }); }}
+        onCuisinePress={(name) => { setSavedPlace(null); navigation.navigate('Rankings', { cuisine: name }); }}
+      />
     </View>
   );
 }

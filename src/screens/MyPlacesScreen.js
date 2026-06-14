@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   ActivityIndicator, RefreshControl,
@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenHeader from '../components/ScreenHeader';
+import PlaceCardModal from '../components/PlaceCardModal';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
 
@@ -22,10 +23,25 @@ const SECTION_LABELS = {
 // My Places → Categories. Single column, one tile per row. Primary categories
 // (Breakfast/Lunch/Dinner) first, a divider, then user-added alphabetical, then
 // Other. Each tile shows per-tier counts (all 6) + total — same numbers as the site.
-export default function MyPlacesScreen({ navigation }) {
+export default function MyPlacesScreen({ navigation, route }) {
   const [data, setData] = useState({ primary: [], user_added: [], other: null });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [savedPlace, setSavedPlace] = useState(null);   // /my-places/:slug deep-link → PlaceCardModal
+
+  // C3b / C2's deferred handler: a /my-places/<slug> Universal Link routes here with
+  // a `slug` param. Open the VIEWER's card for that slug; not-owned/missing → graceful
+  // no-op (stay on the category list). Clears the param so it won't re-open on focus.
+  useEffect(() => {
+    const slug = route?.params?.slug;
+    if (!slug) return;
+    let alive = true;
+    api.json(`/api/places/by-slug/${encodeURIComponent(slug)}`)
+      .then((card) => { if (alive) setSavedPlace(card); })
+      .catch(() => {})
+      .finally(() => { navigation.setParams({ slug: undefined }); });
+    return () => { alive = false; };
+  }, [route?.params?.slug]);
 
   const load = useCallback(async () => {
     try {
@@ -118,6 +134,14 @@ export default function MyPlacesScreen({ navigation }) {
           )}
         </ScrollView>
       )}
+      {/* Deep-link /my-places/<slug> → the viewer's place card (same modal as chat). */}
+      <PlaceCardModal
+        place={savedPlace}
+        visible={!!savedPlace}
+        onClose={() => setSavedPlace(null)}
+        onCategoryPress={(name) => { setSavedPlace(null); navigation.navigate('Rankings', { categoryName: name }); }}
+        onCuisinePress={(name) => { setSavedPlace(null); navigation.navigate('Rankings', { cuisine: name }); }}
+      />
     </View>
   );
 }
