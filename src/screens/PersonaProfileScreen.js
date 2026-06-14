@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Image, Dimensions, Linking,
+  ActivityIndicator, Image, Dimensions, Linking, Share, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import ScreenHeader from '../components/ScreenHeader';
@@ -41,15 +41,33 @@ function TierBadge({ tier, label, small }) {
 }
 
 export default function PersonaProfileScreen({ navigation, route }) {
-  const userId = route?.params?.userId;
+  // userId from in-app nav, OR a `username` from a Universal Link (/u/<name>) that
+  // we resolve to a userId via the privacy-gated lookup (C3a finishes C2's deferred
+  // deep-link handler).
+  const paramUsername = route?.params?.username;
+  const [userId, setUserId] = useState(route?.params?.userId || null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+
+  // Resolve a deep-link username → userId (same no-leak 404 as everywhere).
+  useEffect(() => {
+    if (userId || !paramUsername) return;
+    let alive = true;
+    api.json(`/api/persona/lookup?name=${encodeURIComponent(paramUsername)}`)
+      .then((d) => { if (alive) setUserId(d.user_id); })
+      .catch((e) => { if (alive) { setError(e.status === 404 ? 'This profile is private or doesn’t exist.' : 'Couldn’t load this profile.'); setLoading(false); } });
+    return () => { alive = false; };
+  }, [paramUsername, userId]);
 
   useEffect(() => {
+    if (!userId) return;
     let alive = true;
+    setLoading(true);
     api.json(`/api/persona/${userId}`)
-      .then((d) => { if (alive) setProfile(d); })
+      .then((d) => { if (alive) { setProfile(d); setFollowing(!!d.is_following); } })
       .catch((e) => { if (alive) setError(e.status === 404 ? 'This profile is private or doesn’t exist.' : 'Couldn’t load this profile.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -81,6 +99,29 @@ export default function PersonaProfileScreen({ navigation, route }) {
     navigation.navigate('Home', {
       personaAsk: { id: identity.user_id, name: identity.display_name, prompt },
     });
+
+  // Follow/unfollow this user (C3a). Optimistic toggle; reverts on error.
+  async function toggleFollow() {
+    if (followBusy || !userId) return;
+    const next = !following;
+    setFollowing(next);
+    setFollowBusy(true);
+    try {
+      await api.json(`/api/users/${userId}/${next ? 'follow' : 'unfollow'}`,
+        { method: 'POST', body: JSON.stringify({}) });
+    } catch (e) {
+      setFollowing(!next);
+      Alert.alert('Error', e.message || 'Could not update follow.');
+    } finally {
+      setFollowBusy(false);
+    }
+  }
+
+  // Share YOUR persona link (the C2 Universal Link) via the native share sheet.
+  function shareMyPersona() {
+    const url = `https://tastebuddy-colinchia2.pythonanywhere.com/u/${encodeURIComponent(identity.username || identity.display_name)}`;
+    Share.share({ message: url, url }).catch(() => {});
+  }
 
   return (
     <View style={styles.container}>
@@ -127,6 +168,21 @@ export default function PersonaProfileScreen({ navigation, route }) {
               ))}
           </View>
         </LinearGradient>
+
+        {/* Follow (others) / Share (own) — directly under the Taste Card (C3a) */}
+        {!profile.is_owner ? (
+          <TouchableOpacity
+            style={[styles.followBtn, following && styles.followingBtn]}
+            onPress={toggleFollow} disabled={followBusy} activeOpacity={0.85}>
+            <Text style={[styles.followBtnText, following && styles.followingBtnText]}>
+              {following ? 'Following' : `Follow ${identity.display_name}`}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.shareBtn} onPress={shareMyPersona} activeOpacity={0.85}>
+            <Text style={styles.shareBtnText}>Share my persona</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Top Cuisines + Top Categories — pill rows, locked colors, no borders */}
         <View style={styles.card}>
@@ -336,6 +392,15 @@ const styles = StyleSheet.create({
   cardStatVal: { fontFamily: 'Outfit_800ExtraBold', fontSize: 18, color: COLORS.text },
   cardStatLabel: { fontFamily: 'DMSans_700Bold', fontSize: 9, color: '#9A7212',
                    textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 2 },
+  followBtn: { marginHorizontal: 14, marginTop: 12, backgroundColor: COLORS.gold,
+               borderRadius: 22, paddingVertical: 11, alignItems: 'center' },
+  followBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: '#fff' },
+  followingBtn: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.gold },
+  followingBtnText: { color: COLORS.gold },
+  shareBtn: { marginHorizontal: 14, marginTop: 12, backgroundColor: COLORS.white,
+              borderWidth: 1, borderColor: COLORS.gold, borderRadius: 22,
+              paddingVertical: 11, alignItems: 'center' },
+  shareBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.gold },
   pillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pill: { borderRadius: 20, paddingHorizontal: 13, paddingVertical: 5 },
   pillText: { fontFamily: 'DMSans_500Medium', fontSize: 13 },

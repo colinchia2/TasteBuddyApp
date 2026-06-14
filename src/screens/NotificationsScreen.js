@@ -13,6 +13,7 @@ const TYPE_ICONS = {
   checkin_reminder: 'location-outline',
   visit_reminder:   'calendar-outline',
   tier_change:      'star-outline',
+  user_followed:    'person-add-outline',
   general:          'notifications-outline',
 };
 
@@ -39,6 +40,9 @@ function handleNotificationTap(item, navigation) {
       // compatible once /api/notifications exposes the check-in time.
       checkinAt: item.checkin_at || null,
     });
+  } else if (item.type === 'user_followed' && item.related_user_id) {
+    // Tap a "X started following you" → open that user's persona.
+    navigation.navigate('PersonaProfile', { userId: item.related_user_id });
   }
 }
 

@@ -1,12 +1,14 @@
 // Tastie Personas — app browse screen (port of web /personas, Prompt 4).
-// Curated personas with follow/unfollow via the EXISTING persona_follows
-// system, plus a path into user profiles (your own + a name lookup).
-// NO user_follows / Add / saved-user list / unified badge — that's Prompt 5.
+// Curated personas with follow/unfollow via persona_follows, plus the unified
+// "Following" list (C3a): followed real users + followed curated personas, each
+// quick-askable with the correct kind ('user' → persona_user_id, 'curated' →
+// persona_id). Refreshed on focus so a follow made elsewhere shows up.
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import ScreenHeader from '../components/ScreenHeader';
 import { useAuth } from '../auth/AuthContext';
 import { COLORS } from '../constants/colors';
@@ -32,6 +34,8 @@ export default function PersonasBrowseScreen({ navigation }) {
   const [busy, setBusy] = useState({});   // persona_id → toggling
   const [filter, setFilter] = useState('all');   // type filter chip
 
+  const [mine, setMine] = useState({ users: [], personas: [] });
+
   const load = useCallback(() => {
     api.json('/api/personas')
       .then((d) => setPersonas(d.personas || []))
@@ -39,6 +43,15 @@ export default function PersonasBrowseScreen({ navigation }) {
       .finally(() => setLoading(false));
   }, []);
   useEffect(load, [load]);
+
+  // Unified "Following" list — refetched on focus so follows made on a profile
+  // screen show up when you come back.
+  const loadMine = useCallback(() => {
+    api.json('/api/my-personas')
+      .then((d) => setMine({ users: d.users || [], personas: d.personas || [] }))
+      .catch(() => {});
+  }, []);
+  useFocusEffect(useCallback(() => { loadMine(); }, [loadMine]));
 
   async function toggleFollow(p) {
     if (busy[p.id]) return;
@@ -92,12 +105,45 @@ export default function PersonasBrowseScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Zone B — Saved. Population needs the Prompt 5 follow graph; the empty
-            state is the correct render for now. */}
-        <Text style={styles.sectionLabel}>Saved</Text>
+        {/* Zone B — Following (C3a): followed users + curated personas, unified.
+            Each taps through to ask that AI with the correct kind. */}
+        <Text style={styles.sectionLabel}>Following</Text>
         <View style={styles.card}>
-          <Text style={styles.savedEmpty}>No saved Personas yet.</Text>
-          <Text style={styles.savedEmptySub}>Personas you add will show up here.</Text>
+          {(mine.users.length + mine.personas.length) === 0 ? (
+            <>
+              <Text style={styles.savedEmpty}>Not following anyone yet.</Text>
+              <Text style={styles.savedEmptySub}>People and personas you follow show up here.</Text>
+            </>
+          ) : (
+            <>
+              {mine.users.map((u) => (
+                <TouchableOpacity key={`u${u.id}`} style={styles.selfRow}
+                  onPress={() => navigation.navigate('Home', { personaAsk: { id: u.id, name: u.name, kind: 'user' } })}>
+                  <View style={styles.selfAvatar}>
+                    <Text style={styles.selfAvatarText}>{(u.name || '?')[0].toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.selfTitle}>{u.name}</Text>
+                    <Text style={styles.selfSub}>{u.vibe_tag || "Ask this person's TasteBuddy AI"}</Text>
+                  </View>
+                  <Text style={styles.chevron}>›</Text>
+                </TouchableOpacity>
+              ))}
+              {mine.personas.map((p) => (
+                <TouchableOpacity key={`p${p.id}`} style={styles.selfRow}
+                  onPress={() => navigation.navigate('Home', { personaAsk: { id: p.id, name: p.name, kind: 'curated' } })}>
+                  <View style={styles.selfAvatar}>
+                    <Text style={styles.selfAvatarText}>{(p.name || '?')[0].toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.selfTitle}>{p.name}</Text>
+                    <Text style={styles.selfSub}>{p.vibe_tag || 'Curated persona'}</Text>
+                  </View>
+                  <Text style={styles.chevron}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
         </View>
 
         {/* Zone C — find a friend's Persona by name */}
