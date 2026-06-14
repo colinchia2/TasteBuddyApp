@@ -10,6 +10,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Image, Dimensions, Linking,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import ScreenHeader from '../components/ScreenHeader';
 import TasteDnaRadar from '../components/TasteDnaRadar';
 import { COLORS, TIER_COLORS } from '../constants/colors';
@@ -88,15 +89,21 @@ export default function PersonaProfileScreen({ navigation, route }) {
 
         {/* Hero Taste Card (collectible): seal · rank · name · radar · lean ·
             stats. Replaces the old hero band AND the standalone Taste DNA card —
-            every value appears ONCE, here. Solid warm fill ≈ the web gold
-            gradient (real gradient bg deferred — REMINDER_app_gradient_upgrade.md). */}
-        <View style={styles.tasteCard}>
+            every value appears ONCE, here. Real 3-stop gradient porting web's
+            linear-gradient(160deg, #FFF9ED 0% → #FBEAC6 55% → #F4D89B 100%). */}
+        <LinearGradient
+          colors={['#FFF9ED', '#FBEAC6', '#F4D89B']} locations={[0, 0.55, 1]}
+          start={{ x: 0.33, y: 0.03 }} end={{ x: 0.67, y: 0.97 }} style={styles.tasteCard}>
           {/* Top-left label so the user knows what this is. */}
           <Text style={styles.cardKicker}>Tastie Score Card</Text>
           {/* Score seal (corner badge), labelled "Tastie Score". Tap → the Tastie
-              Score explainer page in the phone's external browser. */}
+              Score explainer page in the phone's external browser. The gradient is a
+              LINEAR approximation of web's radial-gradient(circle at 50% 38%,
+              #FFF6E2 → #F3D79A 78%) — RN/expo-linear-gradient has no radial. */}
           <TouchableOpacity style={styles.seal} activeOpacity={0.8}
             onPress={() => Linking.openURL('https://tastebuddy-colinchia2.pythonanywhere.com/tastie-score')}>
+            <LinearGradient colors={['#FFF6E2', '#F3D79A']} locations={[0, 0.78]}
+              start={{ x: 0.5, y: 0.12 }} end={{ x: 0.5, y: 1 }} style={styles.sealFill} />
             <Text style={styles.sealNum}>{tastie.score}</Text>
             <Text style={styles.sealLabel}>Tastie Score</Text>
           </TouchableOpacity>
@@ -119,7 +126,7 @@ export default function PersonaProfileScreen({ navigation, route }) {
                 </View>
               ))}
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Top Cuisines + Top Categories — pill rows, locked colors, no borders */}
         <View style={styles.card}>
@@ -258,9 +265,12 @@ export default function PersonaProfileScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {/* Ask AI — dark/gold destination at the bottom (the payoff). Flat dark
-            fill ≈ the web gradient. Chips + button behavior unchanged. */}
-        <View style={styles.aiCard}>
+        {/* Ask AI — dark/gold destination at the bottom (the payoff). Real gradient
+            porting web's linear-gradient(155deg, #2A241B → #3C3326). Chips + button
+            behavior unchanged. */}
+        <LinearGradient
+          colors={['#2A241B', '#3C3326']}
+          start={{ x: 0.29, y: 0.05 }} end={{ x: 0.71, y: 0.95 }} style={styles.aiCard}>
           <Text style={styles.aiTitle}>Ask {identity.display_name}'s TasteBuddy AI</Text>
           <Text style={styles.aiSub}>
             It knows all {micro_stats.visits} of {first}'s visits and rankings. Ask it like you'd ask {first}.
@@ -276,7 +286,7 @@ export default function PersonaProfileScreen({ navigation, route }) {
           <TouchableOpacity style={styles.aiBtn} onPress={() => askWithPrompt('')}>
             <Text style={styles.aiBtnText}>Ask {identity.display_name}'s TasteBuddy AI Anything</Text>
           </TouchableOpacity>
-        </View>
+        </LinearGradient>
 
       </ScrollView>
     </View>
@@ -304,7 +314,9 @@ const styles = StyleSheet.create({
                 marginBottom: 8, maxWidth: '64%' },
   seal: { position: 'absolute', top: 14, right: 14, width: 60, height: 60, borderRadius: 30,
           backgroundColor: '#FBE7BE', alignItems: 'center', justifyContent: 'center',
-          borderWidth: 2, borderColor: 'rgba(200,150,12,0.30)' },
+          borderWidth: 2, borderColor: 'rgba(200,150,12,0.30)', overflow: 'hidden' },
+  // Gradient fill behind the seal's score text (medallion approximation).
+  sealFill: { ...StyleSheet.absoluteFillObject, borderRadius: 30 },
   sealNum: { fontFamily: 'Outfit_700Bold', fontSize: 20, lineHeight: 22, color: COLORS.gold },
   sealLabel: { fontFamily: 'Outfit_700Bold', fontSize: 7, letterSpacing: 0.2, color: '#9A7212',
                marginTop: 1, textAlign: 'center', maxWidth: 52 },

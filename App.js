@@ -179,12 +179,28 @@ export default function App() {
     );
   }
 
+  // Universal Links / deep-link routing (Stream C2). Declarative route map only —
+  // the screen-side handlers (resolve /u/<username> -> userId via /api/persona/lookup;
+  // open the Lite PlaceCardModal by slug on My Places) land in the C3 OTA on this
+  // build's new runtime. AASA (server) + associatedDomains entitlement (this build)
+  // are what make the https links fire; tastebuddy:// keeps the existing scheme.
+  const linking = {
+    prefixes: ['https://tastebuddy-colinchia2.pythonanywhere.com', 'tastebuddy://'],
+    config: {
+      screens: {
+        PersonaProfile: 'u/:username',
+        MyPlaces: 'my-places/:slug',
+      },
+    },
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer
           ref={navigationRef}
+          linking={linking}
           onReady={() => {
             // Cold start: check if app was opened by tapping a notification
             Notifications.getLastNotificationResponseAsync().then(response => {

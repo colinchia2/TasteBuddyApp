@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.colinchia.tastebuddy",
+      "associatedDomains": ["applinks:tastebuddy-colinchia2.pythonanywhere.com"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
