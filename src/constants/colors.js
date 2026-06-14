@@ -11,6 +11,9 @@ export const COLORS = {
   danger: '#E24B4A',
   dangerLight: '#FCEBEB',
 
+  // Owned-place chat links (bold/blue/underlined) — must match design_tokens.css --link-blue.
+  linkBlue: '#0C447C',
+
   tierS: '#FAEEDA',
   tierSText: '#633806',
   tierA: '#EAF3DE',

@@ -226,9 +226,9 @@ const styles = StyleSheet.create({
   bulletText: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, lineHeight: 22 },
   normal: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.text, lineHeight: 22 },
   link: { color: COLORS.gold, textDecorationLine: 'underline' },
-  // Owned-place tap target (Theme 3): like surrounding text, medium weight, NOT the
-  // blue/gold external-link look — it opens an in-app modal, not a browser.
-  savedLink: { fontFamily: 'DMSans_500Medium' },
+  // Owned-place tap target (Theme 3): styled as a real link — bold, blue, underlined
+  // (C1/B2). Still opens the in-app PlaceCardModal (not a browser); only the look changed.
+  savedLink: { fontFamily: 'DMSans_700Bold', color: COLORS.linkBlue, textDecorationLine: 'underline' },
   table: { marginVertical: 10, borderWidth: 0.5, borderColor: COLORS.border, borderRadius: 8, overflow: 'hidden' },
   tableHeaderRow: { flexDirection: 'row', backgroundColor: COLORS.offWhite, borderBottomWidth: 1.5, borderBottomColor: COLORS.border },
   tableHeaderCell: { flex: 1, fontFamily: 'DMSans_700Bold', fontSize: 11, color: COLORS.textMuted, padding: 8, textTransform: 'uppercase', letterSpacing: 0.4 },
