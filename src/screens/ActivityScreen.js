@@ -69,6 +69,8 @@ function line3(item) {
     if (item.meal_period) parts.push(item.meal_period);
     if (item.occasion && item.occasion !== item.meal_period) parts.push(item.occasion);
   }
+  // Phase 3: grouped address-add carries detail "Address Added" (web parity).
+  if (item.detail) parts.push(item.detail);
   return parts.filter(Boolean).join(' · ');
 }
 

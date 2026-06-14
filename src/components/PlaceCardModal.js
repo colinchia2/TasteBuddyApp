@@ -39,10 +39,23 @@ function openUrl(url) {
   Linking.openURL(full).catch(() => {});
 }
 
+function openDirections(loc) {
+  if (loc.lat != null && loc.lng != null) {
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`).catch(() => {});
+  } else {
+    openMaps(loc);
+  }
+}
+
 export default function PlaceCardModal({ place, visible, onClose, onCategoryPress, onCuisinePress }) {
   if (!place) return null;
   const price = formatPrice(place.price_level);
   const locationLine = [place.neighborhood, place.city].filter(Boolean).join(', ');
+  // Same-name group (Phase 3): one card, multiple real addresses. Each member
+  // location gets its OWN Map/Directions (canonical first) — the app's "both
+  // addresses". Read-only (editing/ungroup live on the web).
+  const groupLocations = (place.is_group && Array.isArray(place.locations) && place.locations.length > 1)
+    ? place.locations : null;
 
   // ALL of this place's category memberships (e.g. Bar + Chicken Sandwich), from
   // the endpoint's additive `memberships`. Falls back to the single scoped category
@@ -58,7 +71,14 @@ export default function PlaceCardModal({ place, visible, onClose, onCategoryPres
           <View style={styles.handle} />
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.headerRow}>
-              <Text style={styles.name}>{place.display_name}</Text>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={styles.name}>{place.display_name}</Text>
+                {groupLocations ? (
+                  <Text style={styles.groupCount}>
+                    <Ionicons name="location" size={12} color={COLORS.gold} /> {groupLocations.length} locations
+                  </Text>
+                ) : null}
+              </View>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={24} color={COLORS.textMuted} />
               </TouchableOpacity>
@@ -118,6 +138,28 @@ export default function PlaceCardModal({ place, visible, onClose, onCategoryPres
               </View>
             ) : null}
 
+            {/* Grouped locations — every member address with its OWN Map/Directions. */}
+            {groupLocations ? (
+              <View style={styles.locationsBlock}>
+                <Text style={styles.locationsLabel}>LOCATIONS</Text>
+                {groupLocations.map((loc, i) => (
+                  <View key={`${loc.place_id}-${i}`} style={styles.locationRow}>
+                    <Text style={styles.locationAddr}>{loc.address || loc.display_name}</Text>
+                    <View style={styles.locationLinks}>
+                      <TouchableOpacity style={styles.locationLink} onPress={() => openMaps(loc)}>
+                        <Ionicons name="map-outline" size={14} color={COLORS.tierBText} />
+                        <Text style={styles.locationLinkText}>Map</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.locationLink} onPress={() => openDirections(loc)}>
+                        <Ionicons name="navigate-outline" size={14} color={COLORS.tierBText} />
+                        <Text style={styles.locationLinkText}>Directions</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             {/* External links — restaurant's own destinations only. Omit nulls. */}
             <View style={styles.actions}>
               {place.website ? (
@@ -161,7 +203,15 @@ const styles = StyleSheet.create({
     alignSelf: 'center', marginBottom: 16,
   },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  name: { flex: 1, fontFamily: 'Outfit_700Bold', fontSize: 22, color: COLORS.text, marginRight: 12 },
+  name: { fontFamily: 'Outfit_700Bold', fontSize: 22, color: COLORS.text },
+  groupCount: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.gold, marginTop: 3 },
+  locationsBlock: { marginTop: 20, backgroundColor: COLORS.offWhite, borderRadius: 12, padding: 12 },
+  locationsLabel: { fontFamily: 'DMSans_700Bold', fontSize: 10, color: COLORS.textLight, letterSpacing: 0.5, marginBottom: 8 },
+  locationRow: { paddingVertical: 6 },
+  locationAddr: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.text, marginBottom: 5 },
+  locationLinks: { flexDirection: 'row', gap: 14 },
+  locationLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  locationLinkText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: COLORS.tierBText },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12, alignItems: 'center' },
   membershipList: { marginTop: 14, gap: 8 },
   membershipCard: {

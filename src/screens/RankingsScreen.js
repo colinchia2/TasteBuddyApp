@@ -256,6 +256,9 @@ export default function RankingsScreen({ navigation, route }) {
               ) : null}
               <View style={styles.nameCol}>
                 <Text style={styles.name} numberOfLines={1}>{item.display_name}</Text>
+                {(item.is_group && Array.isArray(item.locations) && item.locations.length > 1) ? (
+                  <Text style={styles.groupCount} numberOfLines={1}>{item.locations.length} locations</Text>
+                ) : null}
                 {(item.neighborhood || item.city || item.address) ? (
                   <Text style={styles.meta} numberOfLines={1}>
                     {[item.neighborhood, item.city].filter(Boolean).join(', ') || item.address}
@@ -378,6 +381,7 @@ const styles = StyleSheet.create({
   pillTouch: { maxWidth: '100%' },
   rowPill: { maxWidth: '100%' },
   name: { fontFamily: 'DMSans_700Bold', fontSize: 15, color: COLORS.text },
+  groupCount: { fontFamily: 'DMSans_500Medium', fontSize: 11, color: COLORS.gold, marginTop: 2 },
   meta: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 3 },
   emptyState: { paddingTop: 60, alignItems: 'center', paddingHorizontal: 32 },
   emptyText: { color: COLORS.textMuted, fontSize: 14, fontFamily: 'DMSans_400Regular', textAlign: 'center' },

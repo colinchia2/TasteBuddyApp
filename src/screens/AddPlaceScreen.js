@@ -6,6 +6,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import ScreenHeader from '../components/ScreenHeader';
+import GroupDecisionModal from '../components/GroupDecisionModal';
+import RenameLocationsModal from '../components/RenameLocationsModal';
 import { api } from '../api/client';
 import { COLORS, TIER_COLORS } from '../constants/colors';
 import { fetchBlendedPlaces } from '../utils/placeSearch';
@@ -181,13 +183,22 @@ export default function AddPlaceScreen({ navigation, route }) {
   const searchInputRef = useRef(null);
   const searchTimer = useRef(null);
 
+  // ── Same-name "Group vs New Entry" (Phase 3) ──────────────────────────────
+  const [groupConflict, setGroupConflict] = useState(null);     // conflict payload → decision modal
+  // groupFlow: { mode:'group'|'new', canonicalId, conflict, phase:'create'|'optcat'|'cats',
+  //   baseBody, incomingPlaceId } — null on the normal (no-conflict) path.
+  const [groupFlow, setGroupFlow] = useState(null);
+  const [renameRows, setRenameRows] = useState(null);           // rename modal rows (New Entry)
+  const [optCatPills, setOptCatPills] = useState([]);           // existing group categories (display)
+
   useEffect(() => {
     loadCategories();
     loadCuisines();
     fetchLocation();
     if (prefillGoogleId && prefillName) {
-      setSelectedPlace({ google_place_id: prefillGoogleId, name: prefillName });
-      setStep(2);
+      // Persona-add / LV bridge come in prefilled — still run the same-name
+      // pre-check before the category step (mirrors web).
+      runGroupPrecheck({ google_place_id: prefillGoogleId, name: prefillName });
     } else if (startManual) {
       setManualName(prefillName);
       setManualMode(true);
@@ -270,25 +281,188 @@ export default function AddPlaceScreen({ navigation, route }) {
     }
   }
 
-  async function pickPlace(place) {
+  function pickPlace(place) {
+    // Phase 3: same-name pre-check BEFORE the category step (replaces the old
+    // app-only check-duplicate). Fail-open → normal flow; server still backstops.
+    runGroupPrecheck(place);
+  }
+
+  async function runGroupPrecheck(place) {
+    setGroupConflict(null);
+    setGroupFlow(null);
+    setNeedConfirm(false);
     try {
-      let url = `/api/places/check-duplicate?name=${encodeURIComponent(place.name)}`;
+      let url = `/api/places/check-group-conflict?name=${encodeURIComponent(place.name || '')}`;
       if (place.google_place_id) url += `&google_place_id=${encodeURIComponent(place.google_place_id)}`;
-      const dup = await api.json(url);
-      if (dup.duplicate_type === 'exact') {
-        Alert.alert('Already Added', dup.message);
-        return;
-      }
-      if (dup.duplicate_type === 'fuzzy') {
-        Alert.alert('Similar Place Found', dup.message, [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Add Anyway', onPress: () => { setSelectedPlace(place); setStep(2); } },
-        ]);
+      if (place.address) url += `&address=${encodeURIComponent(place.address)}`;
+      const res = await api.json(url);
+      if (res && res.conflict) {
+        setSelectedPlace(place);
+        setStep(2);
+        setGroupConflict(res.conflict);   // opens the decision modal over step 2
         return;
       }
     } catch {}
     setSelectedPlace(place);
     setStep(2);
+  }
+
+  // Build the place-only body for a decision branch.
+  function groupBaseBody(mode, conflict) {
+    const p = selectedPlace || {};
+    const base = {
+      google_place_id: p.google_place_id || null,
+      name: p.name,
+      address: p.address || null,
+      neighborhood: p.neighborhood || null,
+      lat: p.lat, lng: p.lng,
+      city: (p.manual && p.manualCity) || null,
+      group_aware: true,
+      place_only: true,
+    };
+    if (mode === 'group') base.group_with_place_id = conflict.existing.place_id;
+    else base.force_new = true;
+    return base;
+  }
+
+  function onDecisionGroup() {
+    const base = groupBaseBody('group', groupConflict);
+    setGroupFlow({ mode: 'group', canonicalId: groupConflict.existing.place_id, conflict: groupConflict, phase: 'create', baseBody: base });
+    setGroupConflict(null);
+    placeOnlyCreate(base, 'group', groupConflict.existing.place_id, groupConflict);
+  }
+
+  function onDecisionSeparate() {
+    const base = groupBaseBody('new', groupConflict);
+    setGroupFlow({ mode: 'new', canonicalId: null, conflict: groupConflict, phase: 'create', baseBody: base });
+    setGroupConflict(null);
+    placeOnlyCreate(base, 'new', null, groupConflict);
+  }
+
+  function onDecisionCancel() {
+    setGroupConflict(null);
+    setGroupFlow(null);
+    navigation.goBack();
+  }
+
+  // POST a place_only create (decision branch). On need_location_confirm, reveal the
+  // confirm panel (phase 'create') and the user re-submits; on success → afterPlaceOnly.
+  async function placeOnlyCreate(body, mode, canonicalId, conflict) {
+    setSaving(true);
+    try {
+      const data = await api.json('/api/places/add-mobile', { method: 'POST', body: JSON.stringify(body) });
+      if (data && data.success) { afterPlaceOnly(data, mode, canonicalId, conflict, body); return; }
+    } catch (e) {
+      if (e.need_location_confirm) {
+        const loc = e.location || {};
+        setConfirmCountries(loc.countries || []);
+        setConfirmStates((loc.states || []).map(s => (s && s.name) ? s.name : s));
+        setConfirmCountry(loc.country || '');
+        setConfirmState(loc.state || '');
+        setConfirmCity(prev => prev || loc.city || '');
+        setConfirmNeighborhood(prev => prev || loc.neighborhood || '');
+        setNeedConfirm(true);
+        if (!(loc.city || '').trim()) {
+          Alert.alert('Confirm location', e.message || 'Please confirm the location for this place.');
+        }
+      } else {
+        Alert.alert('Error', e.message);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Step-2 primary while in the place_only 'create' phase: merge the confirm panel
+  // fields into the base body and re-submit.
+  function placeOnlyResubmit() {
+    if (!groupFlow) return;
+    if (needConfirm && !confirmCity.trim()) {
+      Alert.alert('City required', 'Please enter the city to continue.');
+      return;
+    }
+    const confirmHasStates = ['united states', 'united states of america', 'usa', 'us']
+      .includes(confirmCountry.trim().toLowerCase());
+    const body = { ...groupFlow.baseBody };
+    if (needConfirm) {
+      body.location_confirmed = true;
+      body.city = confirmCity.trim();
+      body.country = confirmCountry.trim() || null;
+      body.state = confirmHasStates ? (confirmState.trim() || null) : null;
+      body.neighborhood = confirmNeighborhood.trim() || null;
+    }
+    setGroupFlow(prev => ({ ...prev, baseBody: body }));
+    placeOnlyCreate(body, groupFlow.mode, groupFlow.canonicalId, groupFlow.conflict);
+  }
+
+  async function afterPlaceOnly(data, mode, canonicalId, conflict, body) {
+    setNeedConfirm(false);
+    if (mode === 'group') {
+      // Optional add-category screen → writes on the CANONICAL.
+      let pills = [];
+      try {
+        const cats = await api.json(`/api/places/${canonicalId}/categories-mobile`);
+        pills = (cats || []).map(c => ({ category: c.category, cuisine: c.cuisine }));
+      } catch {}
+      setOptCatPills(pills);
+      setSelectedCategory(null); setCuisine(''); setTier('TBE');
+      setGroupFlow({ mode, canonicalId, conflict, phase: 'optcat', baseBody: body, incomingPlaceId: data.place_id });
+    } else {
+      // New Entry: rename BOTH first, then the category step for the new place.
+      setRenameRows([
+        { place_id: data.place_id, display_name: body.name, address: body.address || '' },
+        { place_id: conflict.existing.place_id, display_name: conflict.existing.display_name, address: conflict.existing.address || '' },
+      ]);
+      setGroupFlow({ mode, canonicalId, conflict, phase: 'rename', baseBody: body, incomingPlaceId: data.place_id });
+    }
+  }
+
+  function onRenameDone() {
+    setRenameRows(null);
+    setSelectedCategory(null); setCuisine(''); setTier('TBE');
+    setGroupFlow(prev => prev ? { ...prev, phase: 'cats' } : prev);
+  }
+
+  // Group optional category → add ONE category on the canonical.
+  async function submitOptCat() {
+    if (!selectedCategory?.id) { Alert.alert('Category required', 'Pick a category or tap Skip.'); return; }
+    if (!cuisine.trim()) { Alert.alert('Cuisine required', 'Please enter a cuisine.'); return; }
+    setSaving(true);
+    try {
+      await api.json(`/api/places/${groupFlow.canonicalId}/add-category-mobile`, {
+        method: 'POST',
+        body: JSON.stringify({ category_id: selectedCategory.id, cuisine: cuisine.trim(), tier }),
+      });
+      finishGroup();
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function finishGroup() {
+    const incomingPlaceId = groupFlow?.incomingPlaceId;
+    const nm = selectedPlace?.name;
+    setGroupFlow(null);
+    setOptCatPills([]);
+    if (continueToLogVisit && incomingPlaceId) {
+      navigation.replace('LogVisit', { placeId: incomingPlaceId, placeName: nm, checkinId: bridgeCheckinId, fromActionCard });
+      return;
+    }
+    Alert.alert('Grouped!', `${nm} is now linked as another location.`, [
+      { text: 'OK', onPress: () => navigation.goBack() },
+    ]);
+  }
+
+  // Step-2 primary dispatcher (normal save vs the group-flow phases).
+  function onStep2Primary() {
+    if (groupFlow) {
+      if (groupFlow.phase === 'create') return placeOnlyResubmit();
+      if (groupFlow.phase === 'optcat') return submitOptCat();
+      // phase 'cats' → fall through to the normal save (adds the new place's categories).
+    }
+    return save();
   }
 
   function openManual() {
@@ -363,7 +537,15 @@ export default function AddPlaceScreen({ navigation, route }) {
         lng: selectedPlace.lng,
         categories: [{ category_id: selectedCategory?.id || null, tier, cuisine: cuisine.trim() || null }],
         cuisine: cuisine.trim(),   // kept top-level for backward-compat
+        // Phase 3: opt into the same-name guard (server only returns
+        // need_group_decision when group_aware is set).
+        group_aware: true,
       };
+      // New-Entry category step: the place already exists (place_only create) —
+      // force_new suppresses the guard so this just adds the user_places rows.
+      if (groupFlow && groupFlow.mode === 'new' && groupFlow.phase === 'cats') {
+        body.force_new = true;
+      }
       if (needConfirm) {
         body.location_confirmed = true;
         body.city = confirmCity.trim();
@@ -382,6 +564,13 @@ export default function AddPlaceScreen({ navigation, route }) {
         method: 'POST',
         body: JSON.stringify(body),
       });
+
+      // Fail-open backstop: if the pre-check missed a conflict, the server returns
+      // this (HTTP 200) → open the decision dialog instead of finishing the add.
+      if (data.need_group_decision) {
+        setGroupConflict(data.conflict);
+        return;
+      }
 
       const isRankedTier = ['S', 'A', 'B', 'C'].includes(tier);
 
@@ -478,6 +667,11 @@ export default function AddPlaceScreen({ navigation, route }) {
   const primaryCats = categories.filter(c => c.is_primary || PRIMARY_NAMES.has(c.name));
   const extraCats = categories.filter(c => !c.is_primary && !PRIMARY_NAMES.has(c.name));
   const visibleCats = showAllCats ? categories : primaryCats;
+  // Category/cuisine/tier hide during the place_only 'create' phase (location-confirm
+  // only); show on the normal add, the group optional-category, and New-Entry category.
+  const showCatSection = !groupFlow || groupFlow.phase === 'optcat' || groupFlow.phase === 'cats';
+  const primaryLabel = groupFlow && groupFlow.phase === 'optcat' ? 'Add category'
+    : (groupFlow && groupFlow.phase === 'create' ? 'Confirm & continue' : 'Add to My Places');
 
   // ── Step 1: Search ──────────────────────────────────────────────────────────
   if (step === 1) {
@@ -602,6 +796,24 @@ export default function AddPlaceScreen({ navigation, route }) {
             {selectedPlace?.address ? <Text style={styles.selectedAddr}>{selectedPlace.address}</Text> : null}
           </View>
 
+          {/* Group optional-category note — what's already tracked (read-only pills). */}
+          {groupFlow && groupFlow.phase === 'optcat' ? (
+            <View style={styles.optCatNote}>
+              <Text style={styles.optCatNoteLead}>You already track these for this Place:</Text>
+              <View style={styles.optCatPills}>
+                {optCatPills.length ? optCatPills.map((p, i) => (
+                  <View key={i} style={styles.optCatPair}>
+                    {p.category ? <View style={styles.catPill}><Text style={styles.catPillText}>{p.category}</Text></View> : null}
+                    {p.cuisine ? <View style={styles.cuiPill}><Text style={styles.cuiPillText}>{p.cuisine}</Text></View> : null}
+                  </View>
+                )) : <Text style={styles.optCatNoteLead}>None yet</Text>}
+              </View>
+              <Text style={styles.optCatNoteTail}>Would you like to add more Categories?</Text>
+            </View>
+          ) : null}
+
+          {showCatSection ? (
+          <>
           {/* Category */}
           <Text style={styles.sectionLabel}>1. Select a Category</Text>
           <View style={styles.chipRow}>
@@ -681,6 +893,8 @@ export default function AddPlaceScreen({ navigation, route }) {
               </View>
             )}
           </View>
+          </>
+          ) : null}
 
           {/* Location confirm — ALWAYS shown on a new add (server returns
               need_location_confirm on the first request and commits only on the
@@ -740,6 +954,8 @@ export default function AddPlaceScreen({ navigation, route }) {
           )}
 
           {/* Tier */}
+          {showCatSection ? (
+          <>
           <Text style={styles.sectionLabel}>Initial Tier</Text>
           <View style={styles.chipRow}>
             {TIERS.map(t => {
@@ -756,13 +972,35 @@ export default function AddPlaceScreen({ navigation, route }) {
               );
             })}
           </View>
+          </>
+          ) : null}
 
-          <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving}>
+          <TouchableOpacity style={styles.saveBtn} onPress={onStep2Primary} disabled={saving}>
             {saving
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.saveBtnText}>Add to My Places</Text>
+              : <Text style={styles.saveBtnText}>{primaryLabel}</Text>
             }
           </TouchableOpacity>
+          {groupFlow && groupFlow.phase === 'optcat' ? (
+            <TouchableOpacity style={styles.skipBtn} onPress={finishGroup} disabled={saving}>
+              <Text style={styles.skipBtnText}>Skip — don’t add a category</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* Same-name decision + rename (Phase 3) */}
+          <GroupDecisionModal
+            visible={!!groupConflict}
+            conflict={groupConflict}
+            incomingAddress={selectedPlace?.address}
+            onGroup={onDecisionGroup}
+            onSeparate={onDecisionSeparate}
+            onCancel={onDecisionCancel}
+          />
+          <RenameLocationsModal
+            visible={!!renameRows}
+            rows={renameRows}
+            onDone={onRenameDone}
+          />
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -845,9 +1083,21 @@ const styles = StyleSheet.create({
   tierChipText: { fontFamily: 'DMSans_700Bold', fontSize: 13 },
   saveBtn: {
     backgroundColor: COLORS.gold, borderRadius: 24, paddingVertical: 16,
-    alignItems: 'center', marginTop: 32, marginBottom: 40,
+    alignItems: 'center', marginTop: 32, marginBottom: 12,
   },
   saveBtnText: { color: '#fff', fontFamily: 'Outfit_700Bold', fontSize: 16 },
+  skipBtn: { alignItems: 'center', paddingVertical: 10, marginBottom: 28 },
+  skipBtnText: { color: COLORS.textMuted, fontFamily: 'DMSans_500Medium', fontSize: 14 },
+  // Group optional-category note (Phase 3) — yellow box + Category/Cuisine pills.
+  optCatNote: { backgroundColor: COLORS.confirmBg, borderRadius: 12, padding: 12, marginBottom: 16 },
+  optCatNoteLead: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.confirmText, marginBottom: 8 },
+  optCatNoteTail: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: COLORS.confirmText, marginTop: 4 },
+  optCatPills: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 },
+  optCatPair: { flexDirection: 'row', alignItems: 'center', marginRight: 8, marginBottom: 6 },
+  catPill: { backgroundColor: COLORS.pillCatBg, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3, marginRight: 5 },
+  catPillText: { color: COLORS.pillCatText, fontFamily: 'DMSans_700Bold', fontSize: 12 },
+  cuiPill: { backgroundColor: COLORS.pillCuiBg, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  cuiPillText: { color: COLORS.pillCuiText, fontFamily: 'DMSans_700Bold', fontSize: 12 },
   optional: { color: COLORS.textMuted, textTransform: 'none', fontFamily: 'DMSans_400Regular' },
   manualToggle: { paddingVertical: 14, alignItems: 'center' },
   manualToggleText: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.gold },

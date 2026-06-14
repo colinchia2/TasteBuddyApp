@@ -69,7 +69,7 @@ export default function CheckInScreen({ navigation }) {
     }
   }
 
-  async function checkIn(place, cityName) {
+  async function checkIn(place, cityName, forceNew) {
     setConfirming(place.google_place_id);
     try {
       const data = await api.json('/api/places/gps-checkin', {
@@ -81,8 +81,28 @@ export default function CheckInScreen({ navigation }) {
           lat: place.lat || null,
           lng: place.lng || null,
           city: (cityName || '').trim() || null,
+          // Phase 3: opt into the same-name guard. Check-in is detection-only on the
+          // backend (grouping/new-entry happen when the place is added/logged), so a
+          // conflict just informs the user and proceeds (force_new) — we don't group
+          // at check-in time.
+          group_aware: true,
+          ...(forceNew ? { force_new: true } : {}),
         }),
       });
+      // Conflict detected (200) — same name as an owned place. Surface it, then
+      // proceed to check in at this location.
+      if (data.need_group_decision) {
+        const ex = (data.conflict && data.conflict.existing) || {};
+        Alert.alert(
+          'Same name as a place you have',
+          `You already have ${ex.display_name || 'a place by this name'}. Check in here at ${place.address || 'this location'}? You can group them when you add or log it.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Check in here', onPress: () => checkIn(place, cityName, true) },
+          ],
+        );
+        return;
+      }
       setCheckedIn({
         name: place.name,
         checkin_id: data.checkin_id,
