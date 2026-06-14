@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../api/client';
@@ -83,6 +83,10 @@ export default function OnboardingCuisineScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Quick cuisine check</Text>
@@ -114,6 +118,7 @@ export default function OnboardingCuisineScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
