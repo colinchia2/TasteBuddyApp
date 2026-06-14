@@ -54,9 +54,9 @@ export default function OnboardingMoreCategoriesScreen({ navigation, route }) {
     try {
       await api.json('/api/onboarding/profile', {
         method: 'PATCH',
-        body: JSON.stringify({ onboarding_step: 8 }),
+        body: JSON.stringify({ onboarding_step: 8 }),   // → Recap
       });
-      navigation.navigate('AskAI', { city });
+      navigation.navigate('Recap', { city });
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
@@ -132,7 +132,7 @@ export default function OnboardingMoreCategoriesScreen({ navigation, route }) {
           <TouchableOpacity style={styles.btn} onPress={handleDone} disabled={saving}>
             {saving
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.btnText}>Done — take me to Ask AI →</Text>}
+              : <Text style={styles.btnText}>Done →</Text>}
           </TouchableOpacity>
         </View>
       </View>

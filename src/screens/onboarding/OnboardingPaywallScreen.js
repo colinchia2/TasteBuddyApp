@@ -21,15 +21,36 @@ export default function OnboardingPaywallScreen({ navigation, route }) {
   const { refreshUser } = useAuth();
   const [finishing, setFinishing] = useState(false);
 
-  async function handleStartFree() {
-    setFinishing(true);
+  async function complete() {
+    // /complete 409s while any place is still UNRANKED (ranked_at IS NULL) — the
+    // mandatory-rank backstop. The ranker shouldn't let this happen, but if it
+    // does, send the user back to finish instead of stranding them.
     try {
       await api.json('/api/onboarding/complete', { method: 'POST' });
       await refreshUser();
     } catch (e) {
+      if (e?.status === 409) {
+        Alert.alert('Almost there', 'A few places still need a tier — let’s finish ranking.',
+          [{ text: 'Finish', onPress: () => navigation.navigate('TileRanker', { city }) }]);
+        setFinishing(false);
+        return;
+      }
       Alert.alert('Error', e.message);
       setFinishing(false);
     }
+  }
+
+  async function handleStartFree() {
+    setFinishing(true);
+    await complete();
+  }
+
+  async function handleGoPro() {
+    setFinishing(true);
+    try {
+      await api.json('/api/onboarding/plan', { method: 'POST', body: JSON.stringify({ plan: 'pro' }) });
+    } catch { /* non-fatal — still complete onboarding on Free terms */ }
+    await complete();
   }
 
   return (
@@ -54,11 +75,11 @@ export default function OnboardingPaywallScreen({ navigation, route }) {
             <FeatureRow check text="5 AI questions / month" />
           </View>
 
-          {/* Pro plan */}
+          {/* Pro plan — selectable now (no payment; real plan='pro' plumbing) */}
           <View style={[styles.planCard, styles.planCardPro]}>
-            <View style={styles.proBadge}><Text style={styles.proBadgeText}>Coming soon</Text></View>
+            <View style={styles.proBadge}><Text style={styles.proBadgeText}>Free in beta</Text></View>
             <Text style={[styles.planName, styles.planNamePro]}>Pro</Text>
-            <Text style={[styles.planPrice, styles.planPricePro]}>$4.99 / month</Text>
+            <Text style={[styles.planPrice, styles.planPricePro]}>$4.99/mo · free for now</Text>
             <FeatureRow check text="Unlimited AI questions" muted={false} />
             <FeatureRow check text="Smart recommendations" muted={false} />
             <FeatureRow check text="Monthly taste digest" muted={false} />
@@ -67,14 +88,14 @@ export default function OnboardingPaywallScreen({ navigation, route }) {
         </View>
 
         <View style={styles.buttons}>
-          <TouchableOpacity style={styles.primaryBtn} onPress={handleStartFree} disabled={finishing}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleGoPro} disabled={finishing}>
             {finishing
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.primaryBtnText}>Start for free →</Text>}
+              : <Text style={styles.primaryBtnText}>Unlock Pro free →</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.secondaryBtn} onPress={handleStartFree} disabled={finishing}>
-            <Text style={styles.secondaryBtnText}>Go Pro — coming soon</Text>
+            <Text style={styles.secondaryBtnText}>Start with Free</Text>
           </TouchableOpacity>
         </View>
       </View>

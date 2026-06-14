@@ -36,6 +36,10 @@ import OnboardingTransitionScreen from './src/screens/onboarding/OnboardingTrans
 import OnboardingCategoryEducationScreen from './src/screens/onboarding/OnboardingCategoryEducationScreen';
 import OnboardingPaywallScreen from './src/screens/onboarding/OnboardingPaywallScreen';
 import OnboardingImportScreen from './src/screens/onboarding/OnboardingImportScreen';
+import OnboardingImportChooserScreen from './src/screens/onboarding/OnboardingImportChooserScreen';
+import OnboardingTextListScreen from './src/screens/onboarding/OnboardingTextListScreen';
+import OnboardingTileRankerScreen from './src/screens/onboarding/OnboardingTileRankerScreen';
+import OnboardingRecapScreen from './src/screens/onboarding/OnboardingRecapScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import CheckInScreen from './src/screens/CheckInScreen';
 import LogVisitScreen from './src/screens/LogVisitScreen';
@@ -57,16 +61,22 @@ import EmailVerificationPendingScreen from './src/screens/EmailVerificationPendi
 
 const Stack = createNativeStackNavigator();
 
+// Onboarding redesign (Part 2) step↔screen resume contract. Import is the default
+// path after Profile; bailing mid-import resumes to the chooser (step 2) and the
+// scan re-runs fresh (cheap — zero Google calls at scan). Cuisine (step 6) is the
+// CONDITIONAL confirm step and self-skips forward when nothing is low-confidence.
 function stepToScreen(step) {
   if (!step || step <= 0) return 'ValueProp';
   if (step === 1) return 'Profile';
-  if (step === 2) return 'Dinner';
-  if (step === 3) return 'Cuisine';
-  if (step === 4) return 'Rank';
+  if (step === 2) return 'ImportChooser';
+  if (step === 3) return 'Dinner';        // manual suggest-and-type fallback (<10 gate)
+  if (step === 4) return 'TileRanker';
   if (step === 5) return 'STier';
-  if (step === 6) return 'Milestone';
-  if (step === 7) return 'MoreCategories';
-  return 'AskAI';
+  if (step === 6) return 'Cuisine';         // conditional cuisine-confirm
+  if (step === 7) return 'MoreCategories';  // opt-in additional-category loop
+  if (step === 8) return 'Recap';
+  if (step === 9) return 'AskAI';           // "Ask TasteBuddy AI Anything"
+  return 'Paywall';
 }
 
 const OnboardingStack = createNativeStackNavigator();
@@ -77,19 +87,29 @@ function OnboardingNavigator({ step }) {
       initialRouteName={stepToScreen(step)}
       screenOptions={{ headerShown: false }}
     >
+      {/* Onboarding redesign (Part 2): ValueProp → Profile → ImportChooser →
+          {Calendar review | Text-list | manual Dinner} → TileRanker → STier →
+          conditional Cuisine → Recap → Paywall. Legacy screens (Transition,
+          Milestone, MoreCategories, CategoryEducation, AskAI, Rank) stay
+          registered for safety but are no longer in the main path. */}
       <OnboardingStack.Screen name="ValueProp" component={OnboardingValuePropScreen} />
       <OnboardingStack.Screen name="Profile" component={OnboardingProfileScreen} />
-      <OnboardingStack.Screen name="Transition" component={OnboardingTransitionScreen} />
+      <OnboardingStack.Screen name="ImportChooser" component={OnboardingImportChooserScreen} />
+      <OnboardingStack.Screen name="Import" component={OnboardingImportScreen} />
+      <OnboardingStack.Screen name="TextList" component={OnboardingTextListScreen} />
       <OnboardingStack.Screen name="Dinner" component={OnboardingDinnerScreen} />
-      <OnboardingStack.Screen name="Cuisine" component={OnboardingCuisineScreen} />
-      <OnboardingStack.Screen name="Rank" component={OnboardingRankScreen} />
+      <OnboardingStack.Screen name="TileRanker" component={OnboardingTileRankerScreen} />
       <OnboardingStack.Screen name="STier" component={OnboardingSTierScreen} />
+      <OnboardingStack.Screen name="Cuisine" component={OnboardingCuisineScreen} />
+      <OnboardingStack.Screen name="Recap" component={OnboardingRecapScreen} />
+      <OnboardingStack.Screen name="Paywall" component={OnboardingPaywallScreen} />
+      {/* legacy (unreferenced in the new flow, kept to avoid nav crashes) */}
+      <OnboardingStack.Screen name="Transition" component={OnboardingTransitionScreen} />
+      <OnboardingStack.Screen name="Rank" component={OnboardingRankScreen} />
       <OnboardingStack.Screen name="Milestone" component={OnboardingMilestoneScreen} />
       <OnboardingStack.Screen name="MoreCategories" component={OnboardingMoreCategoriesScreen} />
       <OnboardingStack.Screen name="CategoryEducation" component={OnboardingCategoryEducationScreen} />
       <OnboardingStack.Screen name="AskAI" component={OnboardingAskAIScreen} />
-      <OnboardingStack.Screen name="Paywall" component={OnboardingPaywallScreen} />
-      <OnboardingStack.Screen name="Import" component={OnboardingImportScreen} />
     </OnboardingStack.Navigator>
   );
 }

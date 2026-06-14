@@ -35,9 +35,9 @@ export default function OnboardingValuePropScreen({ navigation }) {
         </View>
 
         <View style={styles.bullets}>
-          <BulletRow icon="🤖" text="Ask AI anything about food" />
-          <BulletRow icon="🏆" text="Rank places as you go" />
-          <BulletRow icon="📍" text="Check in, put your phone down" />
+          <BulletRow icon="📍" text="Log visits & get reminded later" />
+          <BulletRow icon="🤖" text="Personalized AI recs from your list" />
+          <BulletRow icon="👥" text="Ask friends where they’d eat" />
         </View>
 
         <TouchableOpacity style={styles.btn} onPress={handleStart} disabled={loading}>

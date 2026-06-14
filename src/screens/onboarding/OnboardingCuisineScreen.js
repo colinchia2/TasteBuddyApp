@@ -1,126 +1,82 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Alert,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../../api/client';
 import { COLORS } from '../../constants/colors';
 
+// Onboarding redesign (Part 2) — CONDITIONAL cuisine confirm. Only surfaces places
+// still missing a cuisine after import + the tile-ranker's inline edits. When the
+// AI guessed everything (the common case for been-to imports), this self-skips
+// straight to the Recap — the fast path. Cuisine is also editable on the ranker
+// tile; this is the safety net for blanks.
 export default function OnboardingCuisineScreen({ navigation, route }) {
-  const incomingPlaces = route.params?.places || [];
   const city = route.params?.city || '';
-  const category = route.params?.category || 'Dinner';
-  const isAdditional = route.params?.isAdditional || false;
+  const needCuisine = route.params?.needCuisine || [];
+  const category = route.params?.category || null;   // set on an additional-category pass
 
-  const [rows, setRows] = useState([]); // [{user_place_id, place_id, name, cuisine, editing}]
   const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState([]);     // {user_place_id, place_id, name, cuisine}
   const [saving, setSaving] = useState(false);
+  const skipped = useRef(false);
 
   useEffect(() => {
-    init();
-  }, []);
-
-  async function init() {
-    setLoading(true);
-    let places = incomingPlaces;
-
-    // Resume support: if no places passed, fetch from API
-    if (places.length === 0) {
-      try {
-        const data = await api.json(`/api/onboarding/my-places?category=${encodeURIComponent(category)}`);
-        places = data.places || [];
-      } catch {
-        places = [];
-      }
-    }
-
-    if (places.length === 0) {
-      setRows([]);
-      setLoading(false);
+    if (needCuisine.length === 0) {
+      if (!skipped.current) { skipped.current = true; goToNext(); }
       return;
     }
+    guess();
+  }, []);
 
-    // Guess cuisines
-    let cuisineMap = {};
+  async function guess() {
     try {
       const data = await api.json('/api/onboarding/guess-cuisines', {
         method: 'POST',
         body: JSON.stringify({
-          places: places.map(p => ({ name: p.name, place_id: p.place_id })),
+          places: needCuisine.map(p => ({ name: p.name, place_id: p.place_id })),
           city,
         }),
       });
-      cuisineMap = data.cuisines || {};
+      const map = data.cuisines || {};
+      setItems(needCuisine.map(p => ({ ...p, cuisine: map[p.name] || '' })));
     } catch {
-      // non-fatal — show empty cuisines
+      setItems(needCuisine.map(p => ({ ...p, cuisine: '' })));
+    } finally {
+      setLoading(false);
     }
-
-    setRows(places.map(p => ({
-      user_place_id: p.user_place_id,
-      place_id: p.place_id,
-      name: p.name,
-      cuisine: cuisineMap[p.name] || '',
-      editing: false,
-    })));
-    setLoading(false);
   }
 
-  function setRowCuisine(userPlaceId, value) {
-    setRows(prev => prev.map(r =>
-      r.user_place_id === userPlaceId ? { ...r, cuisine: value } : r
-    ));
+  function setCuisine(idx, val) {
+    setItems(prev => prev.map((it, i) => (i === idx ? { ...it, cuisine: val } : it)));
   }
 
-  function toggleEdit(userPlaceId) {
-    setRows(prev => prev.map(r =>
-      r.user_place_id === userPlaceId ? { ...r, editing: !r.editing } : r
-    ));
+  // Onboarding redesign: ranking/cuisine always returns to the MoreCategories hub
+  // ("add another type of spot?"); marking the just-finished category as done on an
+  // additional pass.
+  async function goToNext() {
+    try { await api.patch('/api/onboarding/profile', { onboarding_step: 7 }); } catch { /* best-effort */ }
+    navigation.navigate('MoreCategories', { city, ...(category ? { categoryCompleted: category } : {}) });
   }
 
   async function handleContinue() {
     setSaving(true);
+    const payload = items
+      .filter(it => (it.cuisine || '').trim())
+      .map(it => ({ user_place_id: it.user_place_id, cuisine: it.cuisine.trim() }));
     try {
-      // Save any manually edited cuisines
-      const edits = rows.filter(r => r.cuisine);
-      if (edits.length > 0) {
-        await api.json('/api/onboarding/set-cuisine', {
-          method: 'POST',
-          body: JSON.stringify(edits.map(r => ({
-            user_place_id: r.user_place_id,
-            cuisine: r.cuisine,
-          }))),
-        });
+      if (payload.length) {
+        await api.json('/api/onboarding/set-cuisine', { method: 'POST', body: JSON.stringify(payload) });
       }
-
-      if (!isAdditional) {
-        await api.json('/api/onboarding/profile', {
-          method: 'PATCH',
-          body: JSON.stringify({ onboarding_step: 4 }),
-        });
-      }
-
-      navigation.navigate('Rank', {
-        places: rows.map(r => ({ user_place_id: r.user_place_id, name: r.name })),
-        city,
-        category,
-        isAdditional,
-        returnTo: route.params?.returnTo,
-      });
-    } catch (e) {
-      Alert.alert('Error', e.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch { /* non-fatal */ }
+    goToNext();
   }
 
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <ActivityIndicator color={COLORS.gold} size="large" />
-          <Text style={styles.loadingText}>Guessing cuisines…</Text>
-        </View>
+        <View style={styles.center}><ActivityIndicator color={COLORS.gold} size="large" /></View>
       </SafeAreaView>
     );
   }
@@ -129,34 +85,24 @@ export default function OnboardingCuisineScreen({ navigation, route }) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Let's confirm the cuisines</Text>
-          <Text style={styles.subtitle}>Tap the pencil to edit any that are wrong.</Text>
+          <Text style={styles.title}>Quick cuisine check</Text>
+          <Text style={styles.subtitle}>
+            We weren’t sure on a few — tweak any that look off.
+          </Text>
         </View>
 
-        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-          {rows.map(row => (
-            <View key={row.user_place_id} style={styles.row}>
-              <Text style={styles.placeName} numberOfLines={1}>{row.name}</Text>
-              {row.editing ? (
-                <TextInput
-                  style={styles.cuisineInput}
-                  value={row.cuisine}
-                  onChangeText={v => setRowCuisine(row.user_place_id, v)}
-                  onBlur={() => toggleEdit(row.user_place_id)}
-                  placeholder="Cuisine type"
-                  placeholderTextColor={COLORS.textLight}
-                  autoFocus
-                  returnKeyType="done"
-                  onSubmitEditing={() => toggleEdit(row.user_place_id)}
-                />
-              ) : (
-                <TouchableOpacity style={styles.cuisineRow} onPress={() => toggleEdit(row.user_place_id)}>
-                  <Text style={[styles.cuisineText, !row.cuisine && styles.cuisinePlaceholder]}>
-                    {row.cuisine || 'Tap to add'}
-                  </Text>
-                  <Text style={styles.editIcon}>✎</Text>
-                </TouchableOpacity>
-              )}
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {items.map((it, i) => (
+            <View key={it.user_place_id} style={styles.row}>
+              <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
+              <TextInput
+                style={styles.input}
+                value={it.cuisine}
+                onChangeText={v => setCuisine(i, v)}
+                placeholder="cuisine"
+                placeholderTextColor={COLORS.textLight}
+                returnKeyType="done"
+              />
             </View>
           ))}
           <View style={{ height: 100 }} />
@@ -164,9 +110,7 @@ export default function OnboardingCuisineScreen({ navigation, route }) {
 
         <View style={styles.footer}>
           <TouchableOpacity style={styles.btn} onPress={handleContinue} disabled={saving}>
-            {saving
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.btnText}>Looks good! →</Text>}
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Looks good →</Text>}
           </TouchableOpacity>
         </View>
       </View>
@@ -177,38 +121,23 @@ export default function OnboardingCuisineScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.offWhite },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingText: {
-    fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.textMuted, marginTop: 12,
-  },
   container: { flex: 1 },
-  header: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 },
-  title: { fontFamily: 'Outfit_800ExtraBold', fontSize: 24, color: COLORS.text, marginBottom: 6 },
+  header: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 12 },
+  title: { fontFamily: 'Outfit_800ExtraBold', fontSize: 24, color: COLORS.text, marginBottom: 4 },
   subtitle: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: COLORS.textMuted },
-  scroll: { flex: 1, paddingHorizontal: 16 },
+  scroll: { flex: 1, paddingHorizontal: 20 },
   row: {
-    backgroundColor: '#fff', borderRadius: 12, borderWidth: 0.5, borderColor: COLORS.border,
-    paddingHorizontal: 16, paddingVertical: 13, marginBottom: 8,
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: COLORS.white, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border,
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
   },
-  placeName: {
-    fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text,
-    flex: 1, marginRight: 12,
+  name: { fontFamily: 'DMSans_700Bold', fontSize: 14, color: COLORS.text, flex: 1, marginRight: 10 },
+  input: {
+    backgroundColor: COLORS.offWhite, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border,
+    paddingHorizontal: 12, paddingVertical: 8, fontFamily: 'DMSans_500Medium', fontSize: 13,
+    color: COLORS.text, minWidth: 130, textAlign: 'right',
   },
-  cuisineRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cuisineText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.textMuted },
-  cuisinePlaceholder: { color: COLORS.textLight, fontStyle: 'italic' },
-  editIcon: { fontSize: 14, color: COLORS.gold },
-  cuisineInput: {
-    borderBottomWidth: 1, borderBottomColor: COLORS.gold,
-    fontFamily: 'DMSans_400Regular', fontSize: 13, color: COLORS.text,
-    minWidth: 100, paddingVertical: 2,
-  },
-  footer: {
-    paddingHorizontal: 24, paddingVertical: 16,
-    borderTopWidth: 0.5, borderTopColor: COLORS.border, backgroundColor: COLORS.offWhite,
-  },
-  btn: {
-    backgroundColor: COLORS.gold, borderRadius: 28, paddingVertical: 17, alignItems: 'center',
-  },
+  footer: { paddingHorizontal: 24, paddingVertical: 16, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.offWhite },
+  btn: { backgroundColor: COLORS.gold, borderRadius: 28, paddingVertical: 17, alignItems: 'center' },
   btnText: { fontFamily: 'DMSans_700Bold', fontSize: 16, color: '#fff' },
 });

@@ -17,7 +17,10 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
   const city = route.params?.city || '';
   const category = route.params?.category || 'Dinner';
   const isAdditional = route.params?.isAdditional || false;
-  const minPlaces = isAdditional ? 1 : MIN_PLACES;
+  // Manual fallback from the <10 import gate: the count already in the DB (imports)
+  // counts toward the floor, so only ask for the remainder here.
+  const alreadyHave = route.params?.currentCount || 0;
+  const minPlaces = isAdditional ? 1 : Math.max(1, MIN_PLACES - alreadyHave);
 
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -156,13 +159,22 @@ export default function OnboardingDinnerScreen({ navigation, route }) {
   async function handleContinue() {
     setSaving(true);
     try {
-      await api.json('/api/onboarding/profile', {
-        method: 'PATCH',
-        body: JSON.stringify({ onboarding_step: isAdditional ? undefined : 3 }),
-      });
-      navigation.navigate('Cuisine', {
-        places, city, category, isAdditional, returnTo: route.params?.returnTo,
-      });
+      // Onboarding redesign: BOTH the first-category fallback and each additional
+      // category converge on the tile-ranker (manual adds are UNRANKED too). The
+      // first pass advances the resume step to 4; an additional pass stays in the
+      // MoreCategories loop (step 7) and just threads its category for the header +
+      // the "completed" mark on return.
+      if (!isAdditional) {
+        await api.json('/api/onboarding/profile', {
+          method: 'PATCH',
+          body: JSON.stringify({ onboarding_step: 4 }),
+        });
+        navigation.navigate('TileRanker', { city, category: category || 'Dinner' });
+      } else {
+        navigation.navigate('TileRanker', {
+          city, category, isAdditional: true, returnTo: route.params?.returnTo,
+        });
+      }
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {

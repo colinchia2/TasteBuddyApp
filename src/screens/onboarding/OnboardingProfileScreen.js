@@ -86,7 +86,8 @@ export default function OnboardingProfileScreen({ navigation }) {
         }),
       });
 
-      navigation.navigate('Transition', { city: city.trim(), displayName: displayName.trim() });
+      // Onboarding redesign (Part 2): import chooser is the default next step.
+      navigation.navigate('ImportChooser', { city: city.trim(), displayName: displayName.trim() });
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {

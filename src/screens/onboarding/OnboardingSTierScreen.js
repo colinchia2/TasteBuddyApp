@@ -80,7 +80,14 @@ export default function OnboardingSTierScreen({ navigation, route }) {
         }))),
       });
 
-      if (!isAdditional) {
+      const nextScreen = route.params?.next;   // onboarding redesign: ranker → STier → Cuisine
+      if (nextScreen) {
+        await api.json('/api/onboarding/profile', {
+          method: 'PATCH',
+          body: JSON.stringify({ onboarding_step: 6 }),
+        });
+        navigation.navigate(nextScreen, { city, ...(route.params?.nextParams || {}) });
+      } else if (!isAdditional) {
         await api.json('/api/onboarding/profile', {
           method: 'PATCH',
           body: JSON.stringify({ onboarding_step: 6 }),

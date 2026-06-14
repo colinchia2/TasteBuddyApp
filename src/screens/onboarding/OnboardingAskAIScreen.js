@@ -47,6 +47,10 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
         body: JSON.stringify({
           message,
           conversation_id: conversationId.current,
+          // Onboarding taste, not a charge: ask the backend to NOT decrement the
+          // free 3/30-day quota for this call. (Honored once the companion web
+          // change lands — see report; meanwhile we simply never show a counter.)
+          onboarding: true,
         }),
       });
       conversationId.current = data.conversation_id;
@@ -78,8 +82,8 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.logo}>TasteBuddy AI</Text>
-          <Text style={styles.headerSub}>Personalized to YOUR rankings</Text>
+          <Text style={styles.logo}>Ask TasteBuddy AI Anything</Text>
+          <Text style={styles.headerSub}>A taste of what it can do — from your own list</Text>
         </View>
 
         <ScrollView
@@ -155,11 +159,6 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
 
-              {questionsRemaining !== null && (
-                <Text style={styles.paywallNote}>
-                  {questionsRemaining} free question{questionsRemaining !== 1 ? 's' : ''} remaining this month
-                </Text>
-              )}
             </>
           )}
 
@@ -168,7 +167,7 @@ export default function OnboardingAskAIScreen({ navigation, route }) {
 
         <View style={styles.footer}>
           <TouchableOpacity style={styles.btn} onPress={handleDone} disabled={loading}>
-            <Text style={styles.btnText}>Go to TasteBoard →</Text>
+            <Text style={styles.btnText}>Continue →</Text>
           </TouchableOpacity>
         </View>
       </View>
